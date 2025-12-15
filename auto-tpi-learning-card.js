@@ -78,6 +78,15 @@ class AutoTPILearningCard extends LitElement {
     return 5;
   }
 
+  getLayoutOptions() {
+    return {
+      grid_columns: 4,
+      grid_min_columns: 2,
+      grid_rows: 5,
+      grid_min_rows: 5
+    };
+  }
+  
   shouldUpdate(changedProps) {
     if (changedProps.has('hass')) {
       // Don't update purely on hass changes unless we need to fetch data
@@ -910,14 +919,65 @@ class AutoTPILearningCardEditor extends LitElement {
     this.config = config;
   }
 
-  configChanged(ev) {
-    const target = ev.target;
-    const newConfig = { ...this.config };
-    
-    if (target.configValue) {
-      newConfig[target.configValue] = target.value;
+  _findLearningSensor(climateEntityId) {
+    if (!this.hass || !climateEntityId) return null;
+
+    // Extraire le nom de base du climate (ex: "thermostat_salon" de "climate.thermostat_salon")
+    const climateName = climateEntityId.replace('climate.', '');
+
+    // Chercher le sensor correspondant
+    const sensorPattern = `sensor.${climateName}_auto_tpi_learning_state`;
+
+    // Vérifier si ce sensor existe
+    if (this.hass.states[sensorPattern]) {
+      return sensorPattern;
     }
-    
+
+    // Sinon chercher tous les sensors qui contiennent le nom et _auto_tpi_learning_state
+    const allEntities = Object.keys(this.hass.states);
+    const matchingSensor = allEntities.find(entityId =>
+      entityId.startsWith('sensor.') &&
+      entityId.includes(climateName) &&
+      entityId.endsWith('_auto_tpi_learning_state')
+    );
+
+    return matchingSensor || null;
+  }
+
+  _climateChanged(ev) {
+    const newClimateEntity = ev.detail.value;
+    const newConfig = { ...this.config };
+
+    newConfig.climate_entity = newClimateEntity;
+
+    // Essayer de trouver automatiquement le learning sensor
+    const learningSensor = this._findLearningSensor(newClimateEntity);
+    if (learningSensor) {
+      newConfig.learning_entity = learningSensor;
+    }
+
+    // Si le name n'est pas défini, générer un nom basé sur le climate
+    if (!newConfig.name && newClimateEntity) {
+      const climateName = newClimateEntity.replace('climate.', '').replace(/_/g, ' ');
+      newConfig.name = climateName.charAt(0).toUpperCase() + climateName.slice(1);
+    }
+
+    this._fireConfigChanged(newConfig);
+  }
+
+  _learningChanged(ev) {
+    const newConfig = { ...this.config };
+    newConfig.learning_entity = ev.detail.value;
+    this._fireConfigChanged(newConfig);
+  }
+
+  _nameChanged(ev) {
+    const newConfig = { ...this.config };
+    newConfig.name = ev.target.value;
+    this._fireConfigChanged(newConfig);
+  }
+
+  _fireConfigChanged(newConfig) {
     const event = new CustomEvent('config-changed', {
       detail: { config: newConfig },
       bubbles: true,
@@ -934,31 +994,35 @@ class AutoTPILearningCardEditor extends LitElement {
     return html`
       <div class="card-config">
         <div class="option">
-          <label>Name</label>
+          <label>Nom</label>
           <input 
             type="text" 
             .value="${this.config.name || ''}" 
-            .configValue="${'name'}"
-            @input="${this.configChanged}"
+            @input="${this._nameChanged}"
           >
         </div>
+        
         <div class="option">
-          <label>Learning Entity (sensor.*_learning_state)</label>
-          <input 
-            type="text" 
-            .value="${this.config.learning_entity || ''}" 
-            .configValue="${'learning_entity'}"
-            @input="${this.configChanged}"
-          >
+          <label>Entité Climate</label>
+          <ha-entity-picker
+            .hass="${this.hass}"
+            .value="${this.config.climate_entity || ''}"
+            .includeDomains="${['climate']}"
+            @value-changed="${this._climateChanged}"
+            allow-custom-entity
+          ></ha-entity-picker>
         </div>
+
         <div class="option">
-          <label>Climate Entity (climate.*)</label>
-          <input 
-            type="text" 
-            .value="${this.config.climate_entity || ''}" 
-            .configValue="${'climate_entity'}"
-            @input="${this.configChanged}"
-          >
+          <label>Entité Learning (sensor)</label>
+          <ha-entity-picker
+            .hass="${this.hass}"
+            .value="${this.config.learning_entity || ''}"
+            .includeDomains="${['sensor']}"
+            .entityFilter="${(entityId) => entityId.includes('_auto_tpi_learning_state')}"
+            @value-changed="${this._learningChanged}"
+            allow-custom-entity
+          ></ha-entity-picker>
         </div>
       </div>
     `;
@@ -978,6 +1042,7 @@ class AutoTPILearningCardEditor extends LitElement {
     }
     label {
       font-size: 12px;
+      font-weight: 500;
       color: var(--secondary-text-color);
     }
     input {
@@ -986,6 +1051,10 @@ class AutoTPILearningCardEditor extends LitElement {
       border-radius: 4px;
       background: var(--card-background-color);
       color: var(--primary-text-color);
+      font-size: 14px;
+    }
+    ha-entity-picker {
+      width: 100%;
     }
   `;
 }
