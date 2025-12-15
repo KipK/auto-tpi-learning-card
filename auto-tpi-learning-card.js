@@ -12,7 +12,9 @@ class AutoTPILearningCard extends LitElement {
     _lastFetchTime: { type: Number },
     _lastStartDt: { type: String },
     _tooltip: { type: Object },
-    _width: { type: Number }
+    _width: { type: Number },
+    _zoomLevel: { type: Number },
+    _panOffset: { type: Number }
   };
 
   static getConfigElement() {
@@ -37,8 +39,10 @@ class AutoTPILearningCard extends LitElement {
     this._lastFetchTime = 0;
     this._lastStartDt = null;
     this._tooltip = null;
-    this._width = 1; // Default to avoiding div by zero
+    this._width = 1;
     this._resizeObserver = null;
+    this._zoomLevel = 1;
+    this._panOffset = 0;
   }
 
   connectedCallback() {
@@ -68,7 +72,6 @@ class AutoTPILearningCard extends LitElement {
       throw new Error('You need to define climate_entity');
     }
     this.config = config;
-    // Reset history on config change to force refetch
     this._history = null;
     this._lastFetchTime = 0;
     this._lastStartDt = null;
@@ -88,12 +91,6 @@ class AutoTPILearningCard extends LitElement {
   }
 
   shouldUpdate(changedProps) {
-    if (changedProps.has('hass')) {
-      // Don't update purely on hass changes unless we need to fetch data
-      // or if the relevant entities have changed state (for telemetry).
-      // We will handle the fetch trigger in updated() or willUpdate()
-      return true;
-    }
     return true;
   }
 
@@ -105,20 +102,18 @@ class AutoTPILearningCard extends LitElement {
       const learningState = this.hass.states[learningEntityId];
       const currentStartDt = learningState?.attributes?.learning_start_dt;
 
-      // Check if learning start date changed (new cycle)
       if (currentStartDt && this._lastStartDt && currentStartDt !== this._lastStartDt) {
-         this._history = null; // Force refetch
+        this._history = null;
       }
       if (currentStartDt) {
-          this._lastStartDt = currentStartDt;
+        this._lastStartDt = currentStartDt;
       }
 
-      // Fetch history if not yet loaded or if it's been a while (> 5 mins)
       const now = Date.now();
       const isStale = (now - this._lastFetchTime) > 5 * 60 * 1000;
-      
+
       const shouldFetch = (!this._history || isStale) && !this._loading;
-      
+
       if (shouldFetch) {
         this._fetchHistory();
       }
@@ -134,16 +129,14 @@ class AutoTPILearningCard extends LitElement {
     try {
       const learningEntityId = this.config.learning_entity;
       const climateEntityId = this.config.climate_entity;
-      
-      // Get current state to determine start time
+
       const learningState = this.hass.states[learningEntityId];
       let startTimeStr = learningState?.attributes?.learning_start_dt;
-      
+
       let startTime;
       if (startTimeStr) {
         startTime = new Date(startTimeStr);
       } else {
-        // Default to 24h ago if not found
         startTime = new Date(Date.now() - 24 * 60 * 60 * 1000);
       }
 
@@ -151,13 +144,10 @@ class AutoTPILearningCard extends LitElement {
       const endTimeIso = new Date().toISOString();
       const entityIds = [learningEntityId, climateEntityId].join(',');
 
-      // Construct URL for history API
-      // We set significant_changes_only=0 to ensure we get all attribute updates.
-      // minimal_response must be omitted (or false) to receive attributes; setting it to 0 might be interpreted as true by the API.
       const url = `history/period/${startTimeIso}?filter_entity_id=${entityIds}&end_time=${endTimeIso}&significant_changes_only=0`;
 
       const response = await this.hass.callApi('GET', url);
-      
+
       this._processHistory(response, learningEntityId, climateEntityId, startTime);
       this._lastFetchTime = Date.now();
 
@@ -180,18 +170,16 @@ class AutoTPILearningCard extends LitElement {
     const tempSeries = [];
     const heatingSeries = [];
 
-    // Iterate over the results. The API returns an array of arrays.
-    // Each inner array corresponds to an entity history.
     for (const entityHistory of rawHistory) {
       if (!entityHistory || entityHistory.length === 0) continue;
-      
+
       const entityId = entityHistory[0].entity_id;
 
       if (entityId === learningEntityId) {
         for (const state of entityHistory) {
           const t = new Date(state.last_updated).getTime();
           const attrs = state.attributes;
-          
+
           if (attrs) {
             if (attrs.calculated_coef_int !== undefined && attrs.calculated_coef_int !== null) {
               const val = parseFloat(attrs.calculated_coef_int);
@@ -207,7 +195,7 @@ class AutoTPILearningCard extends LitElement {
         for (const state of entityHistory) {
           const t = new Date(state.last_updated).getTime();
           const attrs = state.attributes;
-          
+
           if (attrs) {
             if (attrs.current_temperature !== undefined && attrs.current_temperature !== null) {
               const val = parseFloat(attrs.current_temperature);
@@ -255,6 +243,43 @@ class AutoTPILearningCard extends LitElement {
     this._showHeating = !this._showHeating;
   }
 
+  _handleWheel(e) {
+    e.preventDefault();
+    const delta = e.deltaY;
+    const zoomFactor = delta > 0 ? 0.9 : 1.1;
+    this._zoomLevel = Math.max(1, Math.min(10, this._zoomLevel * zoomFactor));
+    this._clampPanOffset();
+  }
+
+  _zoomIn() {
+    this._zoomLevel = Math.min(10, this._zoomLevel * 1.2);
+    this._clampPanOffset();
+  }
+
+  _zoomOut() {
+    this._zoomLevel = Math.max(1, this._zoomLevel / 1.2);
+    this._clampPanOffset();
+  }
+
+  _resetZoom() {
+    this._zoomLevel = 1;
+    this._panOffset = 0;
+  }
+
+  _clampPanOffset() {
+    if (!this._history) return;
+    const now = Date.now();
+    const startTime = this._history.startTime;
+    const totalDuration = now - startTime;
+    const minDuration = 6 * 60 * 60 * 1000;
+    const duration = Math.max(totalDuration, minDuration);
+
+    const visibleDuration = duration / this._zoomLevel;
+    const maxOffset = duration - visibleDuration;
+
+    this._panOffset = Math.max(0, Math.min(maxOffset, this._panOffset));
+  }
+
   _getSVGPoint(svg, clientX, clientY) {
     const pt = svg.createSVGPoint();
     pt.x = clientX;
@@ -263,7 +288,7 @@ class AutoTPILearningCard extends LitElement {
   }
 
   _handleTouchMove(e, xMin, xMax, chartWidth, chartHeight, padding, kint, kext, temp, getY_Kint, getY_Kext, getY_Temp) {
-    e.preventDefault(); // Prevent scrolling while touching chart
+    e.preventDefault();
     const svg = e.currentTarget;
     const touch = e.touches[0];
     const { x, y } = this._getSVGPoint(svg, touch.clientX, touch.clientY);
@@ -278,17 +303,14 @@ class AutoTPILearningCard extends LitElement {
 
   _processCursorMove(mouseX, mouseY, xMin, xMax, chartWidth, chartHeight, padding, kint, kext, temp, getY_Kint, getY_Kext, getY_Temp) {
     const x = mouseX - padding.left;
-    
-    // Check if inside chart area
+
     if (x < 0 || x > chartWidth) {
       this._tooltip = null;
       return;
     }
 
-    // Convert x to time
     const t = xMin + (x / chartWidth) * (xMax - xMin);
 
-    // Helper: Step function value
     const findStepValue = (series, time) => {
       if (!series || series.length === 0) return null;
       let val = null;
@@ -299,14 +321,12 @@ class AutoTPILearningCard extends LitElement {
       return val;
     };
 
-    // Helper: Linear Interpolation for Temperature
     const findLinearValue = (series, time) => {
       if (!series || series.length === 0) return null;
-      
+
       let p1 = null;
       let p2 = null;
-      
-      // Find surrounding points
+
       for (let i = 0; i < series.length; i++) {
         if (series[i].t <= time) {
           p1 = series[i];
@@ -316,21 +336,17 @@ class AutoTPILearningCard extends LitElement {
         }
       }
 
-      // If before first point
       if (!p1 && p2) return p2.val;
-      // If after last point
       if (p1 && !p2) return p1.val;
-      // If empty (covered by check above)
       if (!p1 && !p2) return null;
-      
-      // Interpolate
+
       const t1 = p1.t;
       const t2 = p2.t;
       const v1 = p1.val;
       const v2 = p2.val;
-      
+
       if (t2 === t1) return v1;
-      
+
       const factor = (time - t1) / (t2 - t1);
       return v1 + (v2 - v1) * factor;
     };
@@ -339,9 +355,8 @@ class AutoTPILearningCard extends LitElement {
     const kextValue = findStepValue(kext, t);
     const tempValue = this._showTemp ? findLinearValue(temp, t) : null;
 
-    // Calculate vertical distances to find closest series
     let yKint = Infinity, yKext = Infinity, yTemp = Infinity;
-    
+
     if (kintValue !== null) yKint = getY_Kint(kintValue);
     if (kextValue !== null) yKext = getY_Kext(kextValue);
     if (tempValue !== null) yTemp = getY_Temp(tempValue);
@@ -356,7 +371,6 @@ class AutoTPILearningCard extends LitElement {
     if (distKext < minDist) { minDist = distKext; active = 'kext'; }
     if (distTemp < minDist) { minDist = distTemp; active = 'temp'; }
 
-    // Prepare tooltip data based on active series
     let activeValue = kintValue;
     let activeColor = 'rgb(255, 235, 59)';
     let activeTitle = 'Coef INT';
@@ -403,16 +417,13 @@ class AutoTPILearningCard extends LitElement {
 
     const { x, targetY } = this._tooltip;
     const width = this._width > 0 ? this._width : 800;
-    const height = 350; // Match CSS height
-    
-    // Horizontal positioning: Flip if on right side
+
     const isRightSide = x > width / 2;
     const leftPos = isRightSide ? 'auto' : `${x + 20}px`;
     const rightPos = isRightSide ? `${width - x + 20}px` : 'auto';
 
-    // Vertical positioning: try to center on point, but clamp to container
     const topPos = `${targetY}px`;
-    const translate = 'translate(0, -50%)'; // Center vertically on the point
+    const translate = 'translate(0, -50%)';
 
     return html`
       <div class="tooltip" style="
@@ -442,50 +453,47 @@ class AutoTPILearningCard extends LitElement {
 
     const { kint, kext, temp, heating } = this._history;
 
-    // Use current observed width, or fallback to a reasonable default
-    // We substract 32px for card padding (16px * 2) roughly
     const width = this._width > 0 ? this._width : 800;
     const height = 350;
-    
-    // Padding to accommodate labels
+
     const padding = { top: 40, right: 60, bottom: 60, left: 60 };
     const chartWidth = width - padding.left - padding.right;
     const chartHeight = height - padding.top - padding.bottom;
 
-    // Determine X scale (Time)
     const now = Date.now();
-    let xMin = this._history.startTime;
-    let xMax = now;
+    let baseXMin = this._history.startTime;
+    let baseXMax = now;
 
-    // Enforce minimum 6-hour window
     const minDuration = 6 * 60 * 60 * 1000;
-    if (xMax - xMin < minDuration) {
-      xMax = xMin + minDuration;
+    const totalDuration = baseXMax - baseXMin;
+    const duration = Math.max(totalDuration, minDuration);
+
+    if (baseXMax - baseXMin < minDuration) {
+      baseXMax = baseXMin + minDuration;
     }
 
-    // Scale Helpers
+    const visibleDuration = duration / this._zoomLevel;
+    let xMin = baseXMin + this._panOffset;
+    let xMax = xMin + visibleDuration;
+
     const getX = (t) => {
       if (xMax === xMin) return padding.left;
       return padding.left + ((t - xMin) / (xMax - xMin)) * chartWidth;
     };
 
-    // Y Scale 1: Kint (Left) - Fixed 0 to 1
     const kintMin = 0;
     const kintMax = 1;
     const getY_Kint = (val) => {
       return padding.top + chartHeight - ((val - kintMin) / (kintMax - kintMin)) * chartHeight;
     };
 
-    // Y Scale 2: Kext (Right) - Fixed 0 to 0.1
     const kextMin = 0;
     const kextMax = 0.1;
     const getY_Kext = (val) => {
-      // Clamp value for drawing
       const v = Math.max(kextMin, Math.min(kextMax, val));
       return padding.top + chartHeight - ((v - kextMin) / (kextMax - kextMin)) * chartHeight;
     };
 
-    // Y Scale 3: Temp (Overlay) - Auto Scale
     let tempMin = Infinity;
     let tempMax = -Infinity;
     if (this._showTemp && temp.length > 0) {
@@ -493,20 +501,18 @@ class AutoTPILearningCard extends LitElement {
         if (p.val < tempMin) tempMin = p.val;
         if (p.val > tempMax) tempMax = p.val;
       }
-      // Add padding to temp range
       tempMin = Math.floor(tempMin - 1);
       tempMax = Math.ceil(tempMax + 1);
     } else {
       tempMin = 0;
       tempMax = 30;
     }
-    
+
     const getY_Temp = (val) => {
       if (tempMax === tempMin) return padding.top + chartHeight / 2;
       return padding.top + chartHeight - ((val - tempMin) / (tempMax - tempMin)) * chartHeight;
     };
 
-    // Generate Paths
     const createLinePath = (data, scaleY) => {
       if (data.length === 0) return '';
       return data.map((d, i) =>
@@ -517,21 +523,18 @@ class AutoTPILearningCard extends LitElement {
     const createSteppedLinePath = (data, scaleY) => {
       if (data.length === 0) return '';
       let path = `M ${getX(data[0].t).toFixed(1)},${scaleY(data[0].val).toFixed(1)}`;
-      
+
       for (let i = 0; i < data.length - 1; i++) {
         const p1 = data[i];
-        const p2 = data[i+1];
-        // Horizontal line to next timestamp with current value
+        const p2 = data[i + 1];
         path += ` L ${getX(p2.t).toFixed(1)},${scaleY(p1.val).toFixed(1)}`;
-        // Vertical line to new value
         path += ` L ${getX(p2.t).toFixed(1)},${scaleY(p2.val).toFixed(1)}`;
       }
 
-      // Extend last point to 'now'
       const lastP = data[data.length - 1];
       const currentNow = Date.now();
       if (currentNow > lastP.t) {
-         path += ` L ${getX(currentNow).toFixed(1)},${scaleY(lastP.val).toFixed(1)}`;
+        path += ` L ${getX(currentNow).toFixed(1)},${scaleY(lastP.val).toFixed(1)}`;
       }
 
       return path;
@@ -541,16 +544,15 @@ class AutoTPILearningCard extends LitElement {
     const kextPath = createSteppedLinePath(kext, getY_Kext);
     const tempPath = this._showTemp ? createLinePath(temp, getY_Temp) : '';
 
-    // Heating Bars
     const heatingRects = [];
     if (this._showHeating && heating.length > 0) {
       for (let i = 0; i < heating.length - 1; i++) {
         if (heating[i].val === 1) {
           const x1 = getX(heating[i].t);
-          const x2 = getX(heating[i+1].t);
+          const x2 = getX(heating[i + 1].t);
           const w = x2 - x1;
           if (w > 0) {
-             heatingRects.push(svg`
+            heatingRects.push(svg`
               <rect 
                 x="${x1}" 
                 y="${padding.top + chartHeight - 20}" 
@@ -562,14 +564,13 @@ class AutoTPILearningCard extends LitElement {
           }
         }
       }
-      // Handle last point to 'now' if heating
       const last = heating[heating.length - 1];
       if (last.val === 1) {
-         const x1 = getX(last.t);
-         const x2 = getX(Date.now());
-         const w = x2 - x1;
-         if (w > 0) {
-            heatingRects.push(svg`
+        const x1 = getX(last.t);
+        const x2 = getX(Date.now());
+        const w = x2 - x1;
+        if (w > 0) {
+          heatingRects.push(svg`
               <rect 
                 x="${x1}" 
                 y="${padding.top + chartHeight - 20}" 
@@ -578,11 +579,10 @@ class AutoTPILearningCard extends LitElement {
                 fill="rgba(255, 152, 0, 0.5)"
               />
             `);
-         }
+        }
       }
     }
 
-    // Grid Lines (based on Kint)
     const kintGrid = [0, 0.25, 0.5, 0.75, 1.0].map(val => {
       const y = getY_Kint(val);
       return svg`
@@ -600,7 +600,6 @@ class AutoTPILearningCard extends LitElement {
       `;
     });
 
-    // Kext Axis Labels (Right)
     const kextLabels = [0, 0.05, 0.1].map(val => {
       const y = getY_Kext(val);
       return svg`
@@ -611,26 +610,22 @@ class AutoTPILearningCard extends LitElement {
       `;
     });
 
-    // Time Axis Labels (Smart Ticks)
     const timeLabels = [];
     const durationMs = xMax - xMin;
-    
-    // Determine target interval (aim for ~5-7 labels)
+
     const targetTicks = 5;
     const rawInterval = durationMs / targetTicks;
-    
-    // defined intervals in ms: 1h, 2h, 3h, 4h, 6h, 12h, 24h
+
     const niceIntervals = [
-      3600000, 
-      2 * 3600000, 
-      3 * 3600000, 
-      4 * 3600000, 
-      6 * 3600000, 
-      12 * 3600000, 
+      3600000,
+      2 * 3600000,
+      3 * 3600000,
+      4 * 3600000,
+      6 * 3600000,
+      12 * 3600000,
       24 * 3600000
     ];
-    
-    // Find closest nice interval
+
     let tickInterval = niceIntervals[niceIntervals.length - 1];
     for (const interval of niceIntervals) {
       if (rawInterval <= interval) {
@@ -638,35 +633,32 @@ class AutoTPILearningCard extends LitElement {
         break;
       }
     }
-    
-    // Determine start time rounded to next hour
-    const startDate = new Date(xMin);
-    startDate.setMinutes(0, 0, 0); // floor to hour
-    if (startDate.getTime() < xMin) {
-        startDate.setTime(startDate.getTime() + 3600000);
-    }
-    
-    let currentTickTime = startDate.getTime();
-    
-    while (currentTickTime <= xMax) {
-       const d = new Date(currentTickTime);
-       const h = d.getHours();
-       const hoursInInterval = tickInterval / 3600000;
-       
-       // Check if this hour matches our interval requirement (e.g. 0, 2, 4...)
-       if (h % hoursInInterval === 0) {
-          const xPos = getX(currentTickTime);
-          
-          const label = `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
-          
-          // Date label if crossing midnight (00:00) or if it's the first label and meaningful
-          let subLabel = '';
-          if (h === 0) {
-             const dayOptions = { day: 'numeric', month: 'short' };
-             subLabel = d.toLocaleDateString('fr-FR', dayOptions);
-          }
 
-          timeLabels.push(svg`
+    const startDate = new Date(xMin);
+    startDate.setMinutes(0, 0, 0);
+    if (startDate.getTime() < xMin) {
+      startDate.setTime(startDate.getTime() + 3600000);
+    }
+
+    let currentTickTime = startDate.getTime();
+
+    while (currentTickTime <= xMax) {
+      const d = new Date(currentTickTime);
+      const h = d.getHours();
+      const hoursInInterval = tickInterval / 3600000;
+
+      if (h % hoursInInterval === 0) {
+        const xPos = getX(currentTickTime);
+
+        const label = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+
+        let subLabel = '';
+        if (h === 0) {
+          const dayOptions = { day: 'numeric', month: 'short' };
+          subLabel = d.toLocaleDateString('fr-FR', dayOptions);
+        }
+
+        timeLabels.push(svg`
             <line 
               x1="${xPos}" y1="${padding.top + chartHeight}" 
               x2="${xPos}" y2="${padding.top + chartHeight + 5}" 
@@ -678,16 +670,15 @@ class AutoTPILearningCard extends LitElement {
             >${label}</text>
             ${subLabel ? svg`<text x="${xPos}" y="${height - 4}" text-anchor="middle" font-size="10" fill="#888">${subLabel}</text>` : ''}
           `);
-       }
-       currentTickTime += 3600000; // Step by 1 hour to check alignment
+      }
+      currentTickTime += 3600000;
     }
 
-    // Tooltip indicators (line and circle)
     let tooltipIndicators = svg``;
     if (this._tooltip && this._tooltip.value !== null) {
       const tx = this._tooltip.x;
       const ty = this._tooltip.targetY;
-      
+
       tooltipIndicators = svg`
         <g style="pointer-events: none;">
           <line
@@ -706,31 +697,28 @@ class AutoTPILearningCard extends LitElement {
         height="${height}" 
         viewBox="0 0 ${width} ${height}"
         preserveAspectRatio="xMidYMid meet"
+        @wheel="${this._handleWheel}"
         @mousemove="${(e) => this._handleMouseMove(e, xMin, xMax, chartWidth, chartHeight, padding, kint, kext, temp, getY_Kint, getY_Kext, getY_Temp)}"
         @mouseleave="${this._handleMouseLeave}"
         @touchstart="${(e) => this._handleTouchMove(e, xMin, xMax, chartWidth, chartHeight, padding, kint, kext, temp, getY_Kint, getY_Kext, getY_Temp)}"
         @touchmove="${(e) => this._handleTouchMove(e, xMin, xMax, chartWidth, chartHeight, padding, kint, kext, temp, getY_Kint, getY_Kext, getY_Temp)}"
         @touchend="${this._handleMouseLeave}"
       >
-        <!-- Grid & Axes -->
         ${kintGrid}
         ${kextLabels}
         ${timeLabels}
 
-        <!-- Frame -->
         <rect
           x="${padding.left}" y="${padding.top}"
           width="${chartWidth}" height="${chartHeight}"
           fill="transparent" stroke="var(--divider-color, #444)" stroke-width="1" opacity="0.5"
         />
 
-        <!-- Data -->
         ${heatingRects}
         ${this._showTemp ? svg`<path d="${tempPath}" fill="none" stroke="rgb(33, 150, 243)" stroke-width="1.5" opacity="0.7" style="pointer-events: none;" />` : ''}
         <path d="${kextPath}" fill="none" stroke="rgb(76, 175, 80)" stroke-width="2" style="pointer-events: none;" />
         <path d="${kintPath}" fill="none" stroke="rgb(255, 235, 59)" stroke-width="2.5" style="pointer-events: none;" />
 
-        <!-- Overlay for Tooltip Indicators -->
         ${tooltipIndicators}
       </svg>
     `;
@@ -742,7 +730,7 @@ class AutoTPILearningCard extends LitElement {
     }
 
     const learningData = this._getLearningData();
-    
+
     if (!learningData) {
       return html`
         <ha-card>
@@ -764,7 +752,6 @@ class AutoTPILearningCard extends LitElement {
           <div class="header">${this.config.name || 'Auto-TPI Learning'}</div>
 
           <div class="telemetry">
-            <!-- Band 1 -->
             <div class="telem-line">
               <span class="label">State:</span>
               <span style="${isStateOn ? 'color: var(--success-color, #4CAF50); font-weight: bold;' : ''}">${autoTpiState}</span>
@@ -772,7 +759,6 @@ class AutoTPILearningCard extends LitElement {
               <span class="label">Confidence:</span> ${confidence}%
             </div>
 
-            <!-- Band 2 -->
             <div class="telem-line" style="align-items: flex-start;">
               <div style="display: flex; flex-direction: column; margin-right: 24px;">
                 <span class="kint-color">Kint: ${learningData.kint.toFixed(4)}</span>
@@ -784,13 +770,23 @@ class AutoTPILearningCard extends LitElement {
               </div>
             </div>
 
-            <!-- Band 3 -->
             <div class="telem-line status">
               ${status}
             </div>
           </div>
 
           <div class="chart-container">
+            <div class="zoom-controls">
+              <ha-icon-button @click="${this._zoomIn}">
+                <ha-icon icon="mdi:magnify-plus-outline"></ha-icon>
+              </ha-icon-button>
+              <ha-icon-button @click="${this._resetZoom}">
+                <ha-icon icon="mdi:magnify-remove-outline"></ha-icon>
+              </ha-icon-button>
+              <ha-icon-button @click="${this._zoomOut}">
+                <ha-icon icon="mdi:magnify-minus-outline"></ha-icon>
+              </ha-icon-button>
+            </div>
             ${this._renderChart()}
             ${this._renderTooltip()}
           </div>
@@ -862,6 +858,21 @@ class AutoTPILearningCard extends LitElement {
       margin-bottom: 8px;
       overflow: hidden;
     }
+    .zoom-controls {
+      position: absolute;
+      top: -5px;
+      right: 0px;
+      display: flex;
+      gap: 4px;
+      z-index: 5;
+      background: var(--ha-card-background, var(--card-background-color));
+      border-radius: 0px;
+      padding: 4px;
+    }
+    .zoom-controls ha-icon-button {
+      --mdc-icon-button-size: 32px;
+      --mdc-icon-size: 32px;
+    }
     .tooltip {
       position: absolute;
       background: var(--ha-card-background, var(--card-background-color, white));
@@ -922,18 +933,13 @@ class AutoTPILearningCardEditor extends LitElement {
   _findLearningSensor(climateEntityId) {
     if (!this.hass || !climateEntityId) return null;
 
-    // Extraire le nom de base du climate (ex: "thermostat_salon" de "climate.thermostat_salon")
     const climateName = climateEntityId.replace('climate.', '');
-
-    // Chercher le sensor correspondant
     const sensorPattern = `sensor.${climateName}_auto_tpi_learning_state`;
 
-    // Vérifier si ce sensor existe
     if (this.hass.states[sensorPattern]) {
       return sensorPattern;
     }
 
-    // Sinon chercher tous les sensors qui contiennent le nom et _auto_tpi_learning_state
     const allEntities = Object.keys(this.hass.states);
     const matchingSensor = allEntities.find(entityId =>
       entityId.startsWith('sensor.') &&
@@ -950,13 +956,11 @@ class AutoTPILearningCardEditor extends LitElement {
 
     newConfig.climate_entity = newClimateEntity;
 
-    // Essayer de trouver automatiquement le learning sensor
     const learningSensor = this._findLearningSensor(newClimateEntity);
     if (learningSensor) {
       newConfig.learning_entity = learningSensor;
     }
 
-    // Si le name n'est pas défini, générer un nom basé sur le climate
     if (!newConfig.name && newClimateEntity) {
       const climateName = newClimateEntity.replace('climate.', '').replace(/_/g, ' ');
       newConfig.name = climateName.charAt(0).toUpperCase() + climateName.slice(1);
