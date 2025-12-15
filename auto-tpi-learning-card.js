@@ -545,7 +545,7 @@ class AutoTPILearningCard extends LitElement {
       ">
         <div style="font-weight: bold; font-size: 1.1em; margin-bottom: 2px;">${this._tooltip.title}</div>
         <div style="font-size: 0.9em; opacity: 0.8; margin-bottom: 4px;">${dateStr}</div>
-        <div style="font-weight: bold; font-size: 1.2em;">${this._tooltip.value.toFixed(4)}</div>
+        <div style="font-weight: bold; font-size: 1.2em;">${this._tooltip.value.toFixed(1)}</div>
       </div>
     `;
   }
