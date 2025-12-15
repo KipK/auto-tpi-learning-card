@@ -824,6 +824,12 @@ class AutoTPILearningCard extends LitElement {
       }}"
         @touchend="${this._handleTouchEnd}"
       >
+        <defs>
+          <clipPath id="chart-clip">
+            <rect x="${padding.left}" y="${padding.top}" width="${chartWidth}" height="${chartHeight}" />
+          </clipPath>
+        </defs>
+
         ${kintGrid}
         ${kextLabels}
         ${timeLabels}
@@ -835,9 +841,9 @@ class AutoTPILearningCard extends LitElement {
         />
 
         ${heatingRects}
-        ${this._showTemp ? svg`<path d="${tempPath}" fill="none" stroke="rgb(33, 150, 243)" stroke-width="1.5" opacity="0.7" style="pointer-events: none;" />` : ''}
-        <path d="${kextPath}" fill="none" stroke="rgb(76, 175, 80)" stroke-width="2" style="pointer-events: none;" />
-        <path d="${kintPath}" fill="none" stroke="rgb(255, 235, 59)" stroke-width="2.5" style="pointer-events: none;" />
+        ${this._showTemp ? svg`<path d="${tempPath}" fill="none" stroke="rgb(33, 150, 243)" stroke-width="1.5" opacity="0.7" style="pointer-events: none;" clip-path="url(#chart-clip)" />` : ''}
+        <path d="${kextPath}" fill="none" stroke="rgb(76, 175, 80)" stroke-width="2" style="pointer-events: none;" clip-path="url(#chart-clip)" />
+        <path d="${kintPath}" fill="none" stroke="rgb(255, 235, 59)" stroke-width="2.5" style="pointer-events: none;" clip-path="url(#chart-clip)" />
 
         ${tooltipIndicators}
     </svg>
