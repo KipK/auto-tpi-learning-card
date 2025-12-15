@@ -744,7 +744,8 @@ class AutoTPILearningCard extends LitElement {
     }
 
     const confidence = Math.round(learningData.confidence * 100);
-    const autoTpiState = learningData.state;
+    const isStateOn = learningData.state === 'on';
+    const autoTpiState = isStateOn ? 'Active' : 'Off';
     const status = learningData.status || 'Waiting for update...';
 
     return html`
@@ -755,8 +756,9 @@ class AutoTPILearningCard extends LitElement {
           <div class="telemetry">
             <!-- Band 1 -->
             <div class="telem-line">
-              <span class="label .state">State:</span> ${autoTpiState} 
-              &nbsp;|&nbsp; 
+              <span class="label">State:</span>
+              <span style="${isStateOn ? 'color: var(--success-color, #4CAF50); font-weight: bold;' : ''}">${autoTpiState}</span>
+              &nbsp;|&nbsp;
               <span class="label">Confidence:</span> ${confidence}%
             </div>
 
