@@ -871,19 +871,28 @@ class AutoTPILearningCard extends LitElement {
 
     const heatingRects = [];
     if (this._showHeating && heating.length > 0) {
+      const chartLeft = padding.left;
+      const chartRight = width - padding.right;
+      const chartBottom = padding.top + chartHeight;
+
       for (let i = 0; i < heating.length - 1; i++) {
         if (heating[i].val === 1) {
           const x1 = getX(heating[i].t);
           const x2 = getX(heating[i + 1].t);
-          const w = x2 - x1;
-          if (w > 0) {
+
+          // Clip the rectangle to the visible chart area
+          const rectX = Math.max(chartLeft, Math.min(x1, x2));
+          const rectWidth = Math.max(0, Math.min(chartRight, Math.max(x1, x2)) - rectX);
+
+          if (rectWidth > 0) {
             heatingRects.push(svg`
-              <rect 
-                x="${x1}" 
-                y="${padding.top + chartHeight - 20}" 
-                width="${w}" 
-                height="20" 
+              <rect
+                x="${rectX}"
+                y="${chartBottom - 20}"
+                width="${rectWidth}"
+                height="20"
                 fill="rgba(255, 152, 0, 0.5)"
+                clip-path="url(#chart-clip)"
               />
             `);
           }
@@ -893,15 +902,20 @@ class AutoTPILearningCard extends LitElement {
       if (last.val === 1) {
         const x1 = getX(last.t);
         const x2 = getX(Date.now());
-        const w = x2 - x1;
-        if (w > 0) {
+
+        // Clip the rectangle to the visible chart area
+        const rectX = Math.max(chartLeft, Math.min(x1, x2));
+        const rectWidth = Math.max(0, Math.min(chartRight, Math.max(x1, x2)) - rectX);
+
+        if (rectWidth > 0) {
           heatingRects.push(svg`
-              <rect 
-                x="${x1}" 
-                y="${padding.top + chartHeight - 20}" 
-                width="${w}" 
-                height="20" 
+              <rect
+                x="${rectX}"
+                y="${chartBottom - 20}"
+                width="${rectWidth}"
+                height="20"
                 fill="rgba(255, 152, 0, 0.5)"
+                clip-path="url(#chart-clip)"
               />
             `);
         }
