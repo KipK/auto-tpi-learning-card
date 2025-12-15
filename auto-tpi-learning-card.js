@@ -11,7 +11,8 @@ class AutoTPILearningCard extends LitElement {
     _showHeating: { type: Boolean },
     _lastFetchTime: { type: Number },
     _lastStartDt: { type: String },
-    _tooltip: { type: Object }
+    _tooltip: { type: Object },
+    _width: { type: Number }
   };
 
   static getConfigElement() {
@@ -36,6 +37,27 @@ class AutoTPILearningCard extends LitElement {
     this._lastFetchTime = 0;
     this._lastStartDt = null;
     this._tooltip = null;
+    this._width = 1; // Default to avoiding div by zero
+    this._resizeObserver = null;
+  }
+
+  connectedCallback() {
+    super.connectedCallback();
+    this._resizeObserver = new ResizeObserver(entries => {
+      for (let entry of entries) {
+        if (entry.contentRect.width > 0) {
+          this._width = entry.contentRect.width;
+        }
+      }
+    });
+    this._resizeObserver.observe(this);
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    if (this._resizeObserver) {
+      this._resizeObserver.disconnect();
+    }
   }
 
   setConfig(config) {
@@ -303,6 +325,44 @@ class AutoTPILearningCard extends LitElement {
     this._tooltip = null;
   }
 
+  _renderTooltip() {
+    if (!this._tooltip || this._tooltip.value === null) return html``;
+
+    const date = new Date(this._tooltip.t);
+    const dateOptions = { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' };
+    const dateStr = date.toLocaleString('fr-FR', dateOptions);
+
+    const { x, targetY } = this._tooltip;
+    const width = this._width > 0 ? this._width : 800;
+    const height = 350; // Match CSS height
+    
+    // Horizontal positioning: Flip if on right side
+    const isRightSide = x > width / 2;
+    const leftPos = isRightSide ? 'auto' : `${x + 20}px`;
+    const rightPos = isRightSide ? `${width - x + 20}px` : 'auto';
+
+    // Vertical positioning: try to center on point, but clamp to container
+    // We don't know the exact height of the tooltip here, so we guess a bit.
+    // CSS will handle "shrink to fit" so we just set top/bottom bounds if needed.
+    // For simplicity, just center on targetY.
+    const topPos = `${targetY}px`;
+    const translate = 'translate(0, -50%)'; // Center vertically on the point
+
+    return html`
+      <div class="tooltip" style="
+        left: ${leftPos};
+        right: ${rightPos};
+        top: ${topPos};
+        transform: ${translate};
+        border-left: 5px solid ${this._tooltip.color};
+      ">
+        <div style="font-weight: bold; font-size: 1.1em; margin-bottom: 2px;">${this._tooltip.title}</div>
+        <div style="font-size: 0.9em; opacity: 0.8; margin-bottom: 4px;">${dateStr}</div>
+        <div style="font-weight: bold; font-size: 1.2em;">${this._tooltip.value.toFixed(4)}</div>
+      </div>
+    `;
+  }
+
   _renderChart() {
     if (this._loading) {
       return html`<div class="loading">Loading history data...</div>`;
@@ -316,9 +376,13 @@ class AutoTPILearningCard extends LitElement {
 
     const { kint, kext, temp, heating } = this._history;
 
-    const width = 800;
-    const height = 400;
-    const padding = { top: 20, right: 50, bottom: 40, left: 50 };
+    // Use current observed width, or fallback to a reasonable default
+    // We substract 32px for card padding (16px * 2) roughly
+    const width = this._width > 0 ? this._width : 800;
+    const height = 350;
+    
+    // Padding to accommodate labels
+    const padding = { top: 40, right: 60, bottom: 60, left: 60 };
     const chartWidth = width - padding.left - padding.right;
     const chartHeight = height - padding.top - padding.bottom;
 
@@ -412,8 +476,6 @@ class AutoTPILearningCard extends LitElement {
     const tempPath = this._showTemp ? createLinePath(temp, getY_Temp) : '';
 
     // Heating Bars
-    // Heating data is a series of points. We need to convert it to rectangles.
-    // Assuming simple state hold: value at T applies until T+1
     const heatingRects = [];
     if (this._showHeating && heating.length > 0) {
       for (let i = 0; i < heating.length - 1; i++) {
@@ -466,7 +528,7 @@ class AutoTPILearningCard extends LitElement {
           opacity="0.3" 
         />
         <text 
-          x="${padding.left - 5}" y="${y + 4}"
+          x="${padding.left - 8}" y="${y + 5}"
           text-anchor="end" font-size="12" fill="rgb(255, 235, 59)" opacity="0.9"
         >${val.toFixed(2)}</text>
       `;
@@ -477,7 +539,7 @@ class AutoTPILearningCard extends LitElement {
       const y = getY_Kext(val);
       return svg`
         <text 
-          x="${width - padding.right + 5}" y="${y + 4}"
+          x="${width - padding.right + 8}" y="${y + 5}"
           text-anchor="start" font-size="12" fill="rgb(76, 175, 80)" opacity="0.9"
         >${val.toFixed(2)}</text>
       `;
@@ -498,73 +560,36 @@ class AutoTPILearningCard extends LitElement {
           stroke="#aaa" stroke-width="1" 
         />
         <text 
-          x="${xPos}" y="${height - 5}"
+          x="${xPos}" y="${height - 10}"
           text-anchor="middle" font-size="12" fill="#aaa"
         >${label}</text>
       `);
     }
 
-    // Tooltip rendering
-    let tooltipEl = html``;
+    // Tooltip indicators (line and circle)
+    let tooltipIndicators = svg``;
     if (this._tooltip && this._tooltip.value !== null) {
-      const date = new Date(this._tooltip.t);
-      // Format: 14 Déc 2025, 16:47:31
-      const dateOptions = { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' };
-      const dateStr = date.toLocaleString('fr-FR', dateOptions);
-      
       const tx = this._tooltip.x;
-      const ty = this._tooltip.targetY; // Use the Y of the point on the line
+      const ty = this._tooltip.targetY;
       
-      const boxW = 180;
-      const boxH = 60;
-      
-      // Dynamic positioning to avoid cutoff
-      let boxX = tx + 15;
-      if (boxX + boxW > width) {
-        boxX = tx - boxW - 15;
-      }
-      
-      // Vertical positioning - try to center on point, but keep in bounds
-      let boxY = ty - boxH / 2;
-      if (boxY < 0) boxY = 10;
-      if (boxY + boxH > height) boxY = height - boxH - 10;
-
-      // Pointer path
-      const ptrSize = 8;
-      let ptrPath = '';
-      if (boxX > tx) {
-         // Box to right, pointer on left
-         ptrPath = `M ${boxX} ${ty} L ${boxX} ${ty - ptrSize} L ${boxX - ptrSize} ${ty} L ${boxX} ${ty + ptrSize} Z`;
-      } else {
-         // Box to left, pointer on right
-         ptrPath = `M ${boxX + boxW} ${ty} L ${boxX + boxW} ${ty - ptrSize} L ${boxX + boxW + ptrSize} ${ty} L ${boxX + boxW} ${ty + ptrSize} Z`;
-      }
-
-      tooltipEl = svg`
+      tooltipIndicators = svg`
         <g style="pointer-events: none;">
-          <!-- Crosshair Line -->
           <line
             x1="${tx}" y1="${padding.top}"
             x2="${tx}" y2="${height - padding.bottom}"
             stroke="var(--secondary-text-color)" stroke-width="1" stroke-dasharray="4" opacity="0.3"
           />
-          <circle cx="${tx}" cy="${ty}" r="4" fill="white" stroke="${this._tooltip.color}" stroke-width="2" />
-
-          <!-- Tooltip Box -->
-          <path d="${ptrPath}" fill="${this._tooltip.color}" />
-          <rect x="${boxX}" y="${boxY}" width="${boxW}" height="${boxH}" rx="4" ry="4" fill="${this._tooltip.color}" />
-          
-          <!-- Text Content -->
-          <text x="${boxX + 10}" y="${boxY + 18}" fill="#212121" font-size="13" font-weight="bold">${this._tooltip.title}</text>
-          <text x="${boxX + 10}" y="${boxY + 34}" fill="#212121" font-size="11" font-style="italic">${dateStr}</text>
-          <text x="${boxX + 10}" y="${boxY + 50}" fill="#212121" font-size="13" font-weight="bold">${this._tooltip.value.toFixed(4)}</text>
+          <circle cx="${tx}" cy="${ty}" r="6" fill="white" stroke="${this._tooltip.color}" stroke-width="3" />
         </g>
       `;
     }
 
     return html`
       <svg
-        width="100%" height="100%" viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet"
+        width="100%" 
+        height="${height}" 
+        viewBox="0 0 ${width} ${height}"
+        preserveAspectRatio="xMidYMid meet"
         @mousemove="${(e) => this._handleMouseMove(e, xMin, xMax, chartWidth, chartHeight, padding, kint, kext, temp, getY_Kint, getY_Kext, getY_Temp)}"
         @mouseleave="${this._handleMouseLeave}"
       >
@@ -586,8 +611,8 @@ class AutoTPILearningCard extends LitElement {
         <path d="${kextPath}" fill="none" stroke="rgb(76, 175, 80)" stroke-width="2" style="pointer-events: none;" />
         <path d="${kintPath}" fill="none" stroke="rgb(255, 235, 59)" stroke-width="2.5" style="pointer-events: none;" />
 
-        <!-- Overlay for Tooltip -->
-        ${tooltipEl}
+        <!-- Overlay for Tooltip Indicators -->
+        ${tooltipIndicators}
       </svg>
     `;
   }
@@ -646,6 +671,7 @@ class AutoTPILearningCard extends LitElement {
 
           <div class="chart-container">
             ${this._renderChart()}
+            ${this._renderTooltip()}
           </div>
           
           <div class="legend">
@@ -709,9 +735,25 @@ class AutoTPILearningCard extends LitElement {
     .kext-color { color: rgb(76, 175, 80); font-weight: bold; }
     
     .chart-container {
-      height: 400px;
+      width: 100%;
+      height: 350px;
       position: relative;
       margin-bottom: 8px;
+      overflow: hidden;
+    }
+    .tooltip {
+      position: absolute;
+      background: var(--ha-card-background, var(--card-background-color, white));
+      color: var(--primary-text-color);
+      border: 1px solid var(--divider-color, #ccc);
+      padding: 8px 12px;
+      border-radius: 4px;
+      pointer-events: none;
+      font-size: 12px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+      z-index: 10;
+      white-space: nowrap;
+      transition: top 0.1s ease-out, left 0.1s ease-out;
     }
     .loading, .error, .no-data {
       display: flex;
