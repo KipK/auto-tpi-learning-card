@@ -245,10 +245,28 @@ class AutoTPILearningCard extends LitElement {
     this._showHeating = !this._showHeating;
   }
 
+  _getSVGPoint(svg, clientX, clientY) {
+    const pt = svg.createSVGPoint();
+    pt.x = clientX;
+    pt.y = clientY;
+    return pt.matrixTransform(svg.getScreenCTM().inverse());
+  }
+
+  _handleTouchMove(e, xMin, xMax, chartWidth, chartHeight, padding, kint, kext, temp, getY_Kint, getY_Kext, getY_Temp) {
+    e.preventDefault(); // Prevent scrolling while touching chart
+    const svg = e.currentTarget;
+    const touch = e.touches[0];
+    const { x, y } = this._getSVGPoint(svg, touch.clientX, touch.clientY);
+    this._processCursorMove(x, y, xMin, xMax, chartWidth, chartHeight, padding, kint, kext, temp, getY_Kint, getY_Kext, getY_Temp);
+  }
+
   _handleMouseMove(e, xMin, xMax, chartWidth, chartHeight, padding, kint, kext, temp, getY_Kint, getY_Kext, getY_Temp) {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
+    const svg = e.currentTarget;
+    const { x, y } = this._getSVGPoint(svg, e.clientX, e.clientY);
+    this._processCursorMove(x, y, xMin, xMax, chartWidth, chartHeight, padding, kint, kext, temp, getY_Kint, getY_Kext, getY_Temp);
+  }
+
+  _processCursorMove(mouseX, mouseY, xMin, xMax, chartWidth, chartHeight, padding, kint, kext, temp, getY_Kint, getY_Kext, getY_Temp) {
     const x = mouseX - padding.left;
     
     // Check if inside chart area
@@ -260,8 +278,8 @@ class AutoTPILearningCard extends LitElement {
     // Convert x to time
     const t = xMin + (x / chartWidth) * (xMax - xMin);
 
-    // Find values at time t
-    const findValue = (series, time) => {
+    // Helper: Step function value
+    const findStepValue = (series, time) => {
       if (!series || series.length === 0) return null;
       let val = null;
       for (const p of series) {
@@ -271,9 +289,45 @@ class AutoTPILearningCard extends LitElement {
       return val;
     };
 
-    const kintValue = findValue(kint, t);
-    const kextValue = findValue(kext, t);
-    const tempValue = this._showTemp ? findValue(temp, t) : null;
+    // Helper: Linear Interpolation for Temperature
+    const findLinearValue = (series, time) => {
+      if (!series || series.length === 0) return null;
+      
+      let p1 = null;
+      let p2 = null;
+      
+      // Find surrounding points
+      for (let i = 0; i < series.length; i++) {
+        if (series[i].t <= time) {
+          p1 = series[i];
+        } else {
+          p2 = series[i];
+          break;
+        }
+      }
+
+      // If before first point
+      if (!p1 && p2) return p2.val;
+      // If after last point
+      if (p1 && !p2) return p1.val;
+      // If empty (covered by check above)
+      if (!p1 && !p2) return null;
+      
+      // Interpolate
+      const t1 = p1.t;
+      const t2 = p2.t;
+      const v1 = p1.val;
+      const v2 = p2.val;
+      
+      if (t2 === t1) return v1;
+      
+      const factor = (time - t1) / (t2 - t1);
+      return v1 + (v2 - v1) * factor;
+    };
+
+    const kintValue = findStepValue(kint, t);
+    const kextValue = findStepValue(kext, t);
+    const tempValue = this._showTemp ? findLinearValue(temp, t) : null;
 
     // Calculate vertical distances to find closest series
     let yKint = Infinity, yKext = Infinity, yTemp = Infinity;
@@ -310,6 +364,11 @@ class AutoTPILearningCard extends LitElement {
       activeY = yTemp;
     }
 
+    if (activeValue === null) {
+      this._tooltip = null;
+      return;
+    }
+
     this._tooltip = {
       x: mouseX,
       y: mouseY,
@@ -342,9 +401,6 @@ class AutoTPILearningCard extends LitElement {
     const rightPos = isRightSide ? `${width - x + 20}px` : 'auto';
 
     // Vertical positioning: try to center on point, but clamp to container
-    // We don't know the exact height of the tooltip here, so we guess a bit.
-    // CSS will handle "shrink to fit" so we just set top/bottom bounds if needed.
-    // For simplicity, just center on targetY.
     const topPos = `${targetY}px`;
     const translate = 'translate(0, -50%)'; // Center vertically on the point
 
@@ -545,25 +601,75 @@ class AutoTPILearningCard extends LitElement {
       `;
     });
 
-    // Time Axis Labels
+    // Time Axis Labels (Smart Ticks)
     const timeLabels = [];
-    const steps = 6;
-    for (let i = 0; i <= steps; i++) {
-      const t = xMin + (xMax - xMin) * (i / steps);
-      const date = new Date(t);
-      const label = `${date.getHours().toString().padStart(2,'0')}:${date.getMinutes().toString().padStart(2,'0')}`;
-      const xPos = getX(t);
-      timeLabels.push(svg`
-        <line 
-          x1="${xPos}" y1="${padding.top + chartHeight}" 
-          x2="${xPos}" y2="${padding.top + chartHeight + 5}" 
-          stroke="#aaa" stroke-width="1" 
-        />
-        <text 
-          x="${xPos}" y="${height - 10}"
-          text-anchor="middle" font-size="12" fill="#aaa"
-        >${label}</text>
-      `);
+    const durationMs = xMax - xMin;
+    
+    // Determine target interval (aim for ~5-7 labels)
+    const targetTicks = 5;
+    const rawInterval = durationMs / targetTicks;
+    
+    // defined intervals in ms: 1h, 2h, 3h, 4h, 6h, 12h, 24h
+    const niceIntervals = [
+      3600000, 
+      2 * 3600000, 
+      3 * 3600000, 
+      4 * 3600000, 
+      6 * 3600000, 
+      12 * 3600000, 
+      24 * 3600000
+    ];
+    
+    // Find closest nice interval
+    let tickInterval = niceIntervals[niceIntervals.length - 1];
+    for (const interval of niceIntervals) {
+      if (rawInterval <= interval) {
+        tickInterval = interval;
+        break;
+      }
+    }
+    
+    // Determine start time rounded to next hour
+    const startDate = new Date(xMin);
+    startDate.setMinutes(0, 0, 0); // floor to hour
+    if (startDate.getTime() < xMin) {
+        startDate.setTime(startDate.getTime() + 3600000);
+    }
+    
+    let currentTickTime = startDate.getTime();
+    
+    while (currentTickTime <= xMax) {
+       const d = new Date(currentTickTime);
+       const h = d.getHours();
+       const hoursInInterval = tickInterval / 3600000;
+       
+       // Check if this hour matches our interval requirement (e.g. 0, 2, 4...)
+       if (h % hoursInInterval === 0) {
+          const xPos = getX(currentTickTime);
+          
+          const label = `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+          
+          // Date label if crossing midnight (00:00) or if it's the first label and meaningful
+          let subLabel = '';
+          if (h === 0) {
+             const dayOptions = { day: 'numeric', month: 'short' };
+             subLabel = d.toLocaleDateString('fr-FR', dayOptions);
+          }
+
+          timeLabels.push(svg`
+            <line 
+              x1="${xPos}" y1="${padding.top + chartHeight}" 
+              x2="${xPos}" y2="${padding.top + chartHeight + 5}" 
+              stroke="#aaa" stroke-width="1" 
+            />
+            <text 
+              x="${xPos}" y="${height - 18}"
+              text-anchor="middle" font-size="12" fill="#aaa"
+            >${label}</text>
+            ${subLabel ? svg`<text x="${xPos}" y="${height - 4}" text-anchor="middle" font-size="10" fill="#888">${subLabel}</text>` : ''}
+          `);
+       }
+       currentTickTime += 3600000; // Step by 1 hour to check alignment
     }
 
     // Tooltip indicators (line and circle)
@@ -592,6 +698,9 @@ class AutoTPILearningCard extends LitElement {
         preserveAspectRatio="xMidYMid meet"
         @mousemove="${(e) => this._handleMouseMove(e, xMin, xMax, chartWidth, chartHeight, padding, kint, kext, temp, getY_Kint, getY_Kext, getY_Temp)}"
         @mouseleave="${this._handleMouseLeave}"
+        @touchstart="${(e) => this._handleTouchMove(e, xMin, xMax, chartWidth, chartHeight, padding, kint, kext, temp, getY_Kint, getY_Kext, getY_Temp)}"
+        @touchmove="${(e) => this._handleTouchMove(e, xMin, xMax, chartWidth, chartHeight, padding, kint, kext, temp, getY_Kint, getY_Kext, getY_Temp)}"
+        @touchend="${this._handleMouseLeave}"
       >
         <!-- Grid & Axes -->
         ${kintGrid}
@@ -635,7 +744,7 @@ class AutoTPILearningCard extends LitElement {
     }
 
     const confidence = Math.round(learningData.confidence * 100);
-    const autoTpiState = learningData.state === 'on' ? 'On' : 'Off';
+    const autoTpiState = learningData.state;
     const status = learningData.status || 'Waiting for update...';
 
     return html`
@@ -646,7 +755,7 @@ class AutoTPILearningCard extends LitElement {
           <div class="telemetry">
             <!-- Band 1 -->
             <div class="telem-line">
-              <span class="label">State:</span> ${autoTpiState} 
+              <span class="label .state">State:</span> ${autoTpiState} 
               &nbsp;|&nbsp; 
               <span class="label">Confidence:</span> ${confidence}%
             </div>
