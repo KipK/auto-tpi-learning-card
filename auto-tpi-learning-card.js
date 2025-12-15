@@ -9,6 +9,9 @@ class AutoTPILearningCard extends LitElement {
     _error: { type: String },
     _showTemp: { type: Boolean },
     _showHeating: { type: Boolean },
+    _showSetpoint: { type: Boolean },
+    _showKint: { type: Boolean },
+    _showKext: { type: Boolean },
     _lastFetchTime: { type: Number },
     _lastStartDt: { type: String },
     _tooltip: { type: Object },
@@ -39,6 +42,9 @@ class AutoTPILearningCard extends LitElement {
     this._error = null;
     this._showTemp = true;
     this._showHeating = true;
+    this._showSetpoint = true;
+    this._showKint = true;
+    this._showKext = true;
     this._lastFetchTime = 0;
     this._lastStartDt = null;
     this._tooltip = null;
@@ -253,6 +259,18 @@ class AutoTPILearningCard extends LitElement {
 
   _toggleHeating() {
     this._showHeating = !this._showHeating;
+  }
+
+  _toggleSetpoint() {
+    this._showSetpoint = !this._showSetpoint;
+  }
+
+  _toggleKint() {
+    this._showKint = !this._showKint;
+  }
+
+  _toggleKext() {
+    this._showKext = !this._showKext;
   }
 
   _handleWheel(e) {
@@ -673,11 +691,11 @@ class AutoTPILearningCard extends LitElement {
       return path;
     };
 
-    const kintPath = createSteppedLinePath(kint, getY_Kint);
-    const kextPath = createSteppedLinePath(kext, getY_Kext);
+    const kintPath = this._showKint ? createSteppedLinePath(kint, getY_Kint) : '';
+    const kextPath = this._showKext ? createSteppedLinePath(kext, getY_Kext) : '';
     const tempPath = this._showTemp ? createLinePath(temp, getY_Temp) : '';
-    const setpointPath = createSteppedLinePath(setpoint, getY_Temp);
-    const setpointFilledPath = createFilledSteppedAreaPath(setpoint, getY_Temp);
+    const setpointPath = this._showSetpoint ? createSteppedLinePath(setpoint, getY_Temp) : '';
+    const setpointFilledPath = this._showSetpoint ? createFilledSteppedAreaPath(setpoint, getY_Temp) : '';
 
     const heatingRects = [];
     if (this._showHeating && heating.length > 0) {
@@ -872,11 +890,11 @@ class AutoTPILearningCard extends LitElement {
         />
 
         ${heatingRects}
-        <path d="${setpointFilledPath}" fill="rgba(255, 152, 0, 0.2)" stroke="none" style="pointer-events: none;" clip-path="url(#chart-clip)" />
-        <path d="${setpointPath}" fill="none" stroke="rgba(255, 152, 0, 0.2)" stroke-width="2" style="pointer-events: none;" clip-path="url(#chart-clip)" />
-        ${this._showTemp ? svg`<path d="${tempPath}" fill="none" stroke="rgb(33, 150, 243)" stroke-width="1.5" opacity="0.7" style="pointer-events: none;" clip-path="url(#chart-clip)" />` : ''}
-        <path d="${kextPath}" fill="none" stroke="rgb(76, 175, 80)" stroke-width="2" style="pointer-events: none;" clip-path="url(#chart-clip)" />
-        <path d="${kintPath}" fill="none" stroke="rgb(255, 235, 59)" stroke-width="2.5" style="pointer-events: none;" clip-path="url(#chart-clip)" />
+        ${setpointFilledPath ? svg`<path d="${setpointFilledPath}" fill="rgba(255, 152, 0, 0.4)" stroke="none" style="pointer-events: none;" clip-path="url(#chart-clip)" />` : ''}
+        ${setpointPath ? svg`<path d="${setpointPath}" fill="none" stroke="rgba(255, 152, 0, 0.8)" stroke-width="2" style="pointer-events: none;" clip-path="url(#chart-clip)" />` : ''}
+        ${tempPath ? svg`<path d="${tempPath}" fill="none" stroke="rgb(33, 150, 243)" stroke-width="1.5" opacity="0.7" style="pointer-events: none;" clip-path="url(#chart-clip)" />` : ''}
+        ${kextPath ? svg`<path d="${kextPath}" fill="none" stroke="rgb(76, 175, 80)" stroke-width="2" style="pointer-events: none;" clip-path="url(#chart-clip)" />` : ''}
+        ${kintPath ? svg`<path d="${kintPath}" fill="none" stroke="rgb(255, 235, 59)" stroke-width="2.5" style="pointer-events: none;" clip-path="url(#chart-clip)" />` : ''}
 
         ${tooltipIndicators}
     </svg>
@@ -951,9 +969,15 @@ class AutoTPILearningCard extends LitElement {
           </div>
           
           <div class="legend">
-            <div class="legend-item"><span class="dot kint-bg"></span> Kint</div>
-            <div class="legend-item"><span class="dot kext-bg"></span> Kext</div>
-            <div class="legend-item"><span class="dot setpoint-bg"></span> SetPoint</div>
+            <div class="legend-item clickable" @click="${this._toggleKint}">
+              <span class="dot kint-bg" style="opacity: ${this._showKint ? 1 : 0.3}"></span> Kint
+            </div>
+            <div class="legend-item clickable" @click="${this._toggleKext}">
+              <span class="dot kext-bg" style="opacity: ${this._showKext ? 1 : 0.3}"></span> Kext
+            </div>
+            <div class="legend-item clickable" @click="${this._toggleSetpoint}">
+              <span class="dot setpoint-bg" style="opacity: ${this._showSetpoint ? 1 : 0.3}"></span> SetPoint
+            </div>
             <div class="legend-item clickable" @click="${this._toggleTemp}">
               <span class="dot temp-bg" style="opacity: ${this._showTemp ? 1 : 0.3}"></span> Temp
             </div>
@@ -1075,7 +1099,7 @@ class AutoTPILearningCard extends LitElement {
     .kext-bg { background: rgb(76, 175, 80); }
     .temp-bg { background: rgb(33, 150, 243); }
     .heating-bg { background: rgba(255, 152, 0, 0.7); }
-    .setpoint-bg { background: rgba(255, 152, 0, 0.4); }
+    .setpoint-bg { background: rgba(255, 152, 0, 0.7); }
   `;
 }
 
