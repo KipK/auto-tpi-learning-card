@@ -622,19 +622,9 @@ class AutoTPILearningCard extends LitElement {
       return padding.top + chartHeight - ((v - kextMin) / (kextMax - kextMin)) * chartHeight;
     };
 
-    let tempMin = Infinity;
-    let tempMax = -Infinity;
-    if (this._showTemp && temp.length > 0) {
-      for (const p of temp) {
-        if (p.val < tempMin) tempMin = p.val;
-        if (p.val > tempMax) tempMax = p.val;
-      }
-      tempMin = Math.floor(tempMin - 1);
-      tempMax = Math.ceil(tempMax + 1);
-    } else {
-      tempMin = 0;
-      tempMax = 30;
-    }
+    // Fixed temperature scale: min 10°, max 25°
+    const tempMin = 10;
+    const tempMax = 25;
 
     const getY_Temp = (val) => {
       if (tempMax === tempMin) return padding.top + chartHeight / 2;
