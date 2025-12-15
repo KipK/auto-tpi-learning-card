@@ -12,6 +12,7 @@ class AutoTPILearningCard extends LitElement {
     _showSetpoint: { type: Boolean },
     _showKint: { type: Boolean },
     _showKext: { type: Boolean },
+    _showExtTemp: { type: Boolean },
     _lastFetchTime: { type: Number },
     _lastStartDt: { type: String },
     _tooltip: { type: Object },
@@ -45,6 +46,7 @@ class AutoTPILearningCard extends LitElement {
     this._showSetpoint = true;
     this._showKint = true;
     this._showKext = true;
+    this._showExtTemp = true;
     this._lastFetchTime = 0;
     this._lastStartDt = null;
     this._tooltip = null;
@@ -182,6 +184,7 @@ class AutoTPILearningCard extends LitElement {
     const tempSeries = [];
     const heatingSeries = [];
     const setpointSeries = [];
+    const extTempSeries = [];
 
     for (const entityHistory of rawHistory) {
       if (!entityHistory || entityHistory.length === 0) continue;
@@ -218,6 +221,19 @@ class AutoTPILearningCard extends LitElement {
               const val = parseFloat(attrs.temperature);
               if (!isNaN(val)) setpointSeries.push({ t, val });
             }
+            // Check for external temperature in specific_states
+            let extTempVal = null;
+            if (attrs.specific_states && attrs.specific_states.ext_current_temperature !== undefined && attrs.specific_states.ext_current_temperature !== null) {
+              extTempVal = parseFloat(attrs.specific_states.ext_current_temperature);
+            }
+            // Also check direct attribute for compatibility
+            else if (attrs.ext_current_temperature !== undefined && attrs.ext_current_temperature !== null) {
+              extTempVal = parseFloat(attrs.ext_current_temperature);
+            }
+
+            if (extTempVal !== null && !isNaN(extTempVal)) {
+              extTempSeries.push({ t, val: extTempVal });
+            }
             if (attrs.hvac_action !== undefined) {
               const isHeating = attrs.hvac_action === 'heating' ? 1 : 0;
               heatingSeries.push({ t, val: isHeating });
@@ -233,6 +249,7 @@ class AutoTPILearningCard extends LitElement {
       temp: tempSeries,
       heating: heatingSeries,
       setpoint: setpointSeries,
+      extTemp: extTempSeries,
       startTime: startTime.getTime()
     };
   }
@@ -271,6 +288,10 @@ class AutoTPILearningCard extends LitElement {
 
   _toggleKext() {
     this._showKext = !this._showKext;
+  }
+
+  _toggleExtTemp() {
+    this._showExtTemp = !this._showExtTemp;
   }
 
   _handleWheel(e) {
@@ -579,7 +600,7 @@ class AutoTPILearningCard extends LitElement {
       return html`<div class="no-data">No history data available</div>`;
     }
 
-    const { kint, kext, temp, heating, setpoint } = this._history;
+    const { kint, kext, temp, heating, setpoint, extTemp } = this._history;
 
     const width = this._width > 0 ? this._width : 800;
     const height = 350;
@@ -622,9 +643,28 @@ class AutoTPILearningCard extends LitElement {
       return padding.top + chartHeight - ((v - kextMin) / (kextMax - kextMin)) * chartHeight;
     };
 
-    // Fixed temperature scale: min 10°, max 25°
-    const tempMin = 10;
-    const tempMax = 25;
+    // Dynamic temperature scale based on all temperature curves (temp, extTemp, setpoint)
+    // with bounds between -20° and 40°
+    let tempMin = -20;
+    let tempMax = 40;
+
+    // Calculate min/max from all temperature data regardless of visibility
+    const allTempData = [...temp, ...extTemp, ...setpoint];
+    if (allTempData.length > 0) {
+      const dataMin = Math.min(...allTempData.map(p => p.val));
+      const dataMax = Math.max(...allTempData.map(p => p.val));
+
+      // Apply bounds but keep dynamic range
+      tempMin = Math.max(-20, Math.floor(dataMin - 1));
+      tempMax = Math.min(40, Math.ceil(dataMax + 1));
+
+      // Ensure minimum range of 5 degrees
+      if (tempMax - tempMin < 5) {
+        const center = (tempMin + tempMax) / 2;
+        tempMin = Math.max(-20, center - 2.5);
+        tempMax = Math.min(40, center + 2.5);
+      }
+    }
 
     const getY_Temp = (val) => {
       if (tempMax === tempMin) return padding.top + chartHeight / 2;
@@ -684,6 +724,7 @@ class AutoTPILearningCard extends LitElement {
     const kintPath = this._showKint ? createSteppedLinePath(kint, getY_Kint) : '';
     const kextPath = this._showKext ? createSteppedLinePath(kext, getY_Kext) : '';
     const tempPath = this._showTemp ? createLinePath(temp, getY_Temp) : '';
+    const extTempPath = this._showExtTemp ? createLinePath(extTemp, getY_Temp) : '';
     const setpointPath = this._showSetpoint ? createSteppedLinePath(setpoint, getY_Temp) : '';
     const setpointFilledPath = this._showSetpoint ? createFilledSteppedAreaPath(setpoint, getY_Temp) : '';
 
@@ -883,6 +924,7 @@ class AutoTPILearningCard extends LitElement {
         ${setpointFilledPath ? svg`<path d="${setpointFilledPath}" fill="rgba(255, 152, 0, 0.4)" stroke="none" style="pointer-events: none;" clip-path="url(#chart-clip)" />` : ''}
         ${setpointPath ? svg`<path d="${setpointPath}" fill="none" stroke="rgba(255, 152, 0, 0.8)" stroke-width="2" style="pointer-events: none;" clip-path="url(#chart-clip)" />` : ''}
         ${tempPath ? svg`<path d="${tempPath}" fill="none" stroke="rgb(33, 150, 243)" stroke-width="1.5" opacity="0.7" style="pointer-events: none;" clip-path="url(#chart-clip)" />` : ''}
+        ${extTempPath ? svg`<path d="${extTempPath}" fill="none" stroke="rgb(25, 50, 100)" stroke-width="1.5" opacity="0.9" style="pointer-events: none;" clip-path="url(#chart-clip)" />` : ''}
         ${kextPath ? svg`<path d="${kextPath}" fill="none" stroke="rgb(76, 175, 80)" stroke-width="2" style="pointer-events: none;" clip-path="url(#chart-clip)" />` : ''}
         ${kintPath ? svg`<path d="${kintPath}" fill="none" stroke="rgb(255, 235, 59)" stroke-width="2.5" style="pointer-events: none;" clip-path="url(#chart-clip)" />` : ''}
 
@@ -967,6 +1009,9 @@ class AutoTPILearningCard extends LitElement {
             </div>
             <div class="legend-item clickable" @click="${this._toggleSetpoint}">
               <span class="dot setpoint-bg" style="opacity: ${this._showSetpoint ? 1 : 0.3}"></span> SetPoint
+            </div>
+            <div class="legend-item clickable" @click="${this._toggleExtTemp}">
+              <span class="dot ext-temp-bg" style="opacity: ${this._showExtTemp ? 1 : 0.3}"></span> ExtTemp
             </div>
             <div class="legend-item clickable" @click="${this._toggleTemp}">
               <span class="dot temp-bg" style="opacity: ${this._showTemp ? 1 : 0.3}"></span> Temp
@@ -1090,6 +1135,7 @@ class AutoTPILearningCard extends LitElement {
     .temp-bg { background: rgb(33, 150, 243); }
     .heating-bg { background: rgba(255, 152, 0, 0.7); }
     .setpoint-bg { background: rgba(255, 152, 0, 0.7); }
+    .ext-temp-bg { background: rgb(25, 50, 100); }
   `;
 }
 
