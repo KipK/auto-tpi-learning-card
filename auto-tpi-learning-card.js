@@ -143,8 +143,9 @@ class AutoTPILearningCard extends LitElement {
       const entityIds = [learningEntityId, climateEntityId].join(',');
 
       // Construct URL for history API
-      // We do NOT use minimal_response because we need attributes
-      const url = `history/period/${startTimeIso}?filter_entity_id=${entityIds}&end_time=${endTimeIso}`;
+      // We set significant_changes_only=0 to ensure we get all attribute updates.
+      // minimal_response must be omitted (or false) to receive attributes; setting it to 0 might be interpreted as true by the API.
+      const url = `history/period/${startTimeIso}?filter_entity_id=${entityIds}&end_time=${endTimeIso}&significant_changes_only=0`;
 
       const response = await this.hass.callApi('GET', url);
       
