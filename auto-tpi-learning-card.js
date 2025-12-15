@@ -167,7 +167,7 @@ class AutoTPILearningCard extends LitElement {
 
   _processHistory(rawHistory, learningEntityId, climateEntityId, startTime) {
     if (!Array.isArray(rawHistory)) {
-      this._history = { kint: [], kext: [], temp: [], heating: [], startTime: startTime.getTime() };
+      this._history = { kint: [], kext: [], temp: [], heating: [], setpoint: [], startTime: startTime.getTime() };
       return;
     }
 
@@ -175,6 +175,7 @@ class AutoTPILearningCard extends LitElement {
     const kextSeries = [];
     const tempSeries = [];
     const heatingSeries = [];
+    const setpointSeries = [];
 
     for (const entityHistory of rawHistory) {
       if (!entityHistory || entityHistory.length === 0) continue;
@@ -207,6 +208,10 @@ class AutoTPILearningCard extends LitElement {
               const val = parseFloat(attrs.current_temperature);
               if (!isNaN(val)) tempSeries.push({ t, val });
             }
+            if (attrs.temperature !== undefined && attrs.temperature !== null) {
+              const val = parseFloat(attrs.temperature);
+              if (!isNaN(val)) setpointSeries.push({ t, val });
+            }
             if (attrs.hvac_action !== undefined) {
               const isHeating = attrs.hvac_action === 'heating' ? 1 : 0;
               heatingSeries.push({ t, val: isHeating });
@@ -221,6 +226,7 @@ class AutoTPILearningCard extends LitElement {
       kext: kextSeries,
       temp: tempSeries,
       heating: heatingSeries,
+      setpoint: setpointSeries,
       startTime: startTime.getTime()
     };
   }
@@ -555,7 +561,7 @@ class AutoTPILearningCard extends LitElement {
       return html`<div class="no-data">No history data available</div>`;
     }
 
-    const { kint, kext, temp, heating } = this._history;
+    const { kint, kext, temp, heating, setpoint } = this._history;
 
     const width = this._width > 0 ? this._width : 800;
     const height = 350;
@@ -644,9 +650,34 @@ class AutoTPILearningCard extends LitElement {
       return path;
     };
 
+    const createFilledSteppedAreaPath = (data, scaleY) => {
+      if (data.length === 0) return '';
+      let path = `M ${getX(data[0].t).toFixed(1)},${padding.top + chartHeight}`;
+
+      for (let i = 0; i < data.length - 1; i++) {
+        const p1 = data[i];
+        const p2 = data[i + 1];
+        path += ` L ${getX(p2.t).toFixed(1)},${scaleY(p1.val).toFixed(1)}`;
+        path += ` L ${getX(p2.t).toFixed(1)},${scaleY(p2.val).toFixed(1)}`;
+      }
+
+      const lastP = data[data.length - 1];
+      const currentNow = Date.now();
+      if (currentNow > lastP.t) {
+        path += ` L ${getX(currentNow).toFixed(1)},${scaleY(lastP.val).toFixed(1)}`;
+      }
+
+      path += ` L ${getX(data[data.length - 1].t).toFixed(1)},${padding.top + chartHeight}`;
+      path += ` L ${getX(data[0].t).toFixed(1)},${padding.top + chartHeight} Z`;
+
+      return path;
+    };
+
     const kintPath = createSteppedLinePath(kint, getY_Kint);
     const kextPath = createSteppedLinePath(kext, getY_Kext);
     const tempPath = this._showTemp ? createLinePath(temp, getY_Temp) : '';
+    const setpointPath = createSteppedLinePath(setpoint, getY_Temp);
+    const setpointFilledPath = createFilledSteppedAreaPath(setpoint, getY_Temp);
 
     const heatingRects = [];
     if (this._showHeating && heating.length > 0) {
@@ -841,6 +872,8 @@ class AutoTPILearningCard extends LitElement {
         />
 
         ${heatingRects}
+        <path d="${setpointFilledPath}" fill="rgba(255, 152, 0, 0.2)" stroke="none" style="pointer-events: none;" clip-path="url(#chart-clip)" />
+        <path d="${setpointPath}" fill="none" stroke="rgba(255, 152, 0, 0.2)" stroke-width="2" style="pointer-events: none;" clip-path="url(#chart-clip)" />
         ${this._showTemp ? svg`<path d="${tempPath}" fill="none" stroke="rgb(33, 150, 243)" stroke-width="1.5" opacity="0.7" style="pointer-events: none;" clip-path="url(#chart-clip)" />` : ''}
         <path d="${kextPath}" fill="none" stroke="rgb(76, 175, 80)" stroke-width="2" style="pointer-events: none;" clip-path="url(#chart-clip)" />
         <path d="${kintPath}" fill="none" stroke="rgb(255, 235, 59)" stroke-width="2.5" style="pointer-events: none;" clip-path="url(#chart-clip)" />
@@ -848,7 +881,7 @@ class AutoTPILearningCard extends LitElement {
         ${tooltipIndicators}
     </svg>
     `;
-    }
+  }
 
   render() {
     if (!this.hass || !this.config) {
@@ -918,14 +951,15 @@ class AutoTPILearningCard extends LitElement {
           </div>
           
           <div class="legend">
-             <div class="legend-item"><span class="dot kint-bg"></span> Kint</div>
-             <div class="legend-item"><span class="dot kext-bg"></span> Kext</div>
-             <div class="legend-item clickable" @click="${this._toggleTemp}">
-               <span class="dot temp-bg" style="opacity: ${this._showTemp ? 1 : 0.3}"></span> Temp
-             </div>
-             <div class="legend-item clickable" @click="${this._toggleHeating}">
-               <span class="dot heating-bg" style="opacity: ${this._showHeating ? 1 : 0.3}"></span> Heating
-             </div>
+            <div class="legend-item"><span class="dot kint-bg"></span> Kint</div>
+            <div class="legend-item"><span class="dot kext-bg"></span> Kext</div>
+            <div class="legend-item"><span class="dot setpoint-bg"></span> SetPoint</div>
+            <div class="legend-item clickable" @click="${this._toggleTemp}">
+              <span class="dot temp-bg" style="opacity: ${this._showTemp ? 1 : 0.3}"></span> Temp
+            </div>
+            <div class="legend-item clickable" @click="${this._toggleHeating}">
+              <span class="dot heating-bg" style="opacity: ${this._showHeating ? 1 : 0.3}"></span> Heating
+            </div>
           </div>
         </div>
       </ha-card>
@@ -1041,6 +1075,7 @@ class AutoTPILearningCard extends LitElement {
     .kext-bg { background: rgb(76, 175, 80); }
     .temp-bg { background: rgb(33, 150, 243); }
     .heating-bg { background: rgba(255, 152, 0, 0.7); }
+    .setpoint-bg { background: rgba(255, 152, 0, 0.4); }
   `;
 }
 
