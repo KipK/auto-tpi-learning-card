@@ -14,7 +14,10 @@ class AutoTPILearningCard extends LitElement {
     _tooltip: { type: Object },
     _width: { type: Number },
     _zoomLevel: { type: Number },
-    _panOffset: { type: Number }
+    _panOffset: { type: Number },
+    _isDragging: { type: Boolean },
+    _dragStartX: { type: Number },
+    _dragStartOffset: { type: Number }
   };
 
   static getConfigElement() {
@@ -43,6 +46,9 @@ class AutoTPILearningCard extends LitElement {
     this._resizeObserver = null;
     this._zoomLevel = 1;
     this._panOffset = 0;
+    this._isDragging = false;
+    this._dragStartX = 0;
+    this._dragStartOffset = 0;
   }
 
   connectedCallback() {
@@ -245,9 +251,39 @@ class AutoTPILearningCard extends LitElement {
 
   _handleWheel(e) {
     e.preventDefault();
+
+    if (!this._history) return;
+
+    const svg = e.currentTarget;
+    const rect = svg.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+
+    // Calculer la position relative dans le graphique (0 à 1)
+    const padding = { left: 60, right: 60 };
+    const chartWidth = rect.width - padding.left - padding.right;
+    const relativeX = (mouseX - padding.left) / chartWidth;
+
+    // Clamp entre 0 et 1
+    const clampedX = Math.max(0, Math.min(1, relativeX));
+
+    const now = Date.now();
+    const startTime = this._history.startTime;
+    const totalDuration = Math.max(now - startTime, 6 * 60 * 60 * 1000);
+
+    // Calculer le temps actuel sous le curseur
+    const visibleDuration = totalDuration / this._zoomLevel;
+    const currentTimeUnderCursor = startTime + this._panOffset + (clampedX * visibleDuration);
+
+    // Appliquer le zoom
     const delta = e.deltaY;
     const zoomFactor = delta > 0 ? 0.9 : 1.1;
-    this._zoomLevel = Math.max(1, Math.min(10, this._zoomLevel * zoomFactor));
+    const newZoomLevel = Math.max(1, Math.min(10, this._zoomLevel * zoomFactor));
+
+    // Calculer le nouveau pan offset pour garder le même point sous le curseur
+    const newVisibleDuration = totalDuration / newZoomLevel;
+    this._panOffset = currentTimeUnderCursor - startTime - (clampedX * newVisibleDuration);
+
+    this._zoomLevel = newZoomLevel;
     this._clampPanOffset();
   }
 
@@ -299,6 +335,74 @@ class AutoTPILearningCard extends LitElement {
     const svg = e.currentTarget;
     const { x, y } = this._getSVGPoint(svg, e.clientX, e.clientY);
     this._processCursorMove(x, y, xMin, xMax, chartWidth, chartHeight, padding, kint, kext, temp, getY_Kint, getY_Kext, getY_Temp);
+  }
+  _handleMouseDown(e) {
+    this._isDragging = true;
+    this._dragStartX = e.clientX;
+    this._dragStartOffset = this._panOffset;
+    e.currentTarget.style.cursor = 'grabbing';
+  }
+
+  _handleMouseMove_Drag(e) {
+    if (!this._isDragging || !this._history) return;
+
+    const svg = e.currentTarget;
+    const rect = svg.getBoundingClientRect();
+    const padding = { left: 60, right: 60 };
+    const chartWidth = rect.width - padding.left - padding.right;
+
+    const deltaX = this._dragStartX - e.clientX;
+
+    const now = Date.now();
+    const startTime = this._history.startTime;
+    const totalDuration = Math.max(now - startTime, 6 * 60 * 60 * 1000);
+    const visibleDuration = totalDuration / this._zoomLevel;
+
+    // Convertir le delta pixel en delta temps
+    const deltaTime = (deltaX / chartWidth) * visibleDuration;
+
+    this._panOffset = this._dragStartOffset + deltaTime;
+    this._clampPanOffset();
+  }
+
+  _handleMouseUp(e) {
+    this._isDragging = false;
+    e.currentTarget.style.cursor = 'default';
+  }
+
+  _handleTouchStart(e) {
+    if (e.touches.length === 1) {
+      this._isDragging = true;
+      this._dragStartX = e.touches[0].clientX;
+      this._dragStartOffset = this._panOffset;
+    }
+  }
+
+  _handleTouchMove_Drag(e) {
+    if (!this._isDragging || !this._history || e.touches.length !== 1) return;
+
+    const svg = e.currentTarget;
+    const rect = svg.getBoundingClientRect();
+    const padding = { left: 60, right: 60 };
+    const chartWidth = rect.width - padding.left - padding.right;
+
+    const deltaX = this._dragStartX - e.touches[0].clientX;
+
+    const now = Date.now();
+    const startTime = this._history.startTime;
+    const totalDuration = Math.max(now - startTime, 6 * 60 * 60 * 1000);
+    const visibleDuration = totalDuration / this._zoomLevel;
+
+    const deltaTime = (deltaX / chartWidth) * visibleDuration;
+
+    this._panOffset = this._dragStartOffset + deltaTime;
+    this._clampPanOffset();
+  }
+
+  _handleTouchEnd(e) {
+    if (e.touches.length === 0) {
+      this._isDragging = false;
+    }
   }
 
   _processCursorMove(mouseX, mouseY, xMin, xMax, chartWidth, chartHeight, padding, kint, kext, temp, getY_Kint, getY_Kext, getY_Temp) {
@@ -697,12 +801,28 @@ class AutoTPILearningCard extends LitElement {
         height="${height}" 
         viewBox="0 0 ${width} ${height}"
         preserveAspectRatio="xMidYMid meet"
+        style="cursor: ${this._isDragging ? 'grabbing' : 'default'}; overflow: hidden;"
         @wheel="${this._handleWheel}"
-        @mousemove="${(e) => this._handleMouseMove(e, xMin, xMax, chartWidth, chartHeight, padding, kint, kext, temp, getY_Kint, getY_Kext, getY_Temp)}"
-        @mouseleave="${this._handleMouseLeave}"
-        @touchstart="${(e) => this._handleTouchMove(e, xMin, xMax, chartWidth, chartHeight, padding, kint, kext, temp, getY_Kint, getY_Kext, getY_Temp)}"
-        @touchmove="${(e) => this._handleTouchMove(e, xMin, xMax, chartWidth, chartHeight, padding, kint, kext, temp, getY_Kint, getY_Kext, getY_Temp)}"
-        @touchend="${this._handleMouseLeave}"
+        @mousedown="${this._handleMouseDown}"
+        @mousemove="${(e) => {
+        this._handleMouseMove_Drag(e);
+        if (!this._isDragging) {
+          this._handleMouseMove(e, xMin, xMax, chartWidth, chartHeight, padding, kint, kext, temp, getY_Kint, getY_Kext, getY_Temp);
+        }
+      }}"
+        @mouseup="${this._handleMouseUp}"
+        @mouseleave="${(e) => {
+        this._handleMouseUp(e);
+        this._handleMouseLeave();
+      }}"
+        @touchstart="${this._handleTouchStart}"
+        @touchmove="${(e) => {
+        this._handleTouchMove_Drag(e);
+        if (!this._isDragging) {
+          this._handleTouchMove(e, xMin, xMax, chartWidth, chartHeight, padding, kint, kext, temp, getY_Kint, getY_Kext, getY_Temp);
+        }
+      }}"
+        @touchend="${this._handleTouchEnd}"
       >
         ${kintGrid}
         ${kextLabels}
@@ -720,9 +840,9 @@ class AutoTPILearningCard extends LitElement {
         <path d="${kintPath}" fill="none" stroke="rgb(255, 235, 59)" stroke-width="2.5" style="pointer-events: none;" />
 
         ${tooltipIndicators}
-      </svg>
+    </svg>
     `;
-  }
+    }
 
   render() {
     if (!this.hass || !this.config) {
