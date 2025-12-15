@@ -21,9 +21,9 @@ class AutoTPILearningCard extends LitElement {
 
   static getStubConfig() {
     return {
-      learning_entity: "sensor.thermostat_salon_auto_tpi_learning_state",
-      climate_entity: "climate.thermostat_salon",
-      name: "Thermostat Salon"
+      learning_entity: "",
+      climate_entity: "",
+      name: ""
     };
   }
 
@@ -86,7 +86,7 @@ class AutoTPILearningCard extends LitElement {
       grid_min_rows: 5
     };
   }
-  
+
   shouldUpdate(changedProps) {
     if (changedProps.has('hass')) {
       // Don't update purely on hass changes unless we need to fetch data
