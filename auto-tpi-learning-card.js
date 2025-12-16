@@ -183,83 +183,133 @@ class AutoTPILearningCard extends LitElement {
     }
   }
 
+  // --- OPTIMIZATION HELPERS ---
+
+  /**
+   * Binary search to find the insertion index of a timestamp.
+   * Equivalent to Python's bisect_left
+   * @param {Array} data - Array of objects {t, val} sorted by t
+   * @param {Number} targetTime - The timestamp to search for
+   * @returns {Number} - The index where targetTime could be inserted while maintaining order
+   */
+  _bisectLeft(data, targetTime) {
+    let low = 0;
+    let high = data.length;
+    while (low < high) {
+      const mid = (low + high) >>> 1;
+      if (data[mid].t < targetTime) {
+        low = mid + 1;
+      } else {
+        high = mid;
+      }
+    }
+    return low;
+  }
+
+  /**
+   * Binary search to find the index of the last element <= targetTime
+   * @param {Array} data - Array of objects {t, val} sorted by t
+   * @param {Number} targetTime - The timestamp to search for
+   * @returns {Number} - The index of the element, or -1 if all are larger
+   */
+  _bisectRight(data, targetTime) {
+    let low = 0;
+    let high = data.length;
+    while (low < high) {
+      const mid = (low + high) >>> 1;
+      if (data[mid].t <= targetTime) {
+        low = mid + 1;
+      } else {
+        high = mid;
+      }
+    }
+    return low - 1;
+  }
+
+  /**
+   * Efficiently get only the data points needed for the current visible window.
+   * Includes one point before and one after the window to ensure lines are drawn completely to the edges.
+   */
+  _getVisibleData(series, xMin, xMax) {
+    if (!series || series.length === 0) return [];
+    
+    // Find index of first point >= xMin
+    let startIndex = this._bisectLeft(series, xMin);
+    // Find index of last point <= xMax
+    let endIndex = this._bisectRight(series, xMax);
+
+    // Expand window by 1 point on each side to ensure continuity (drawing lines to/from off-screen)
+    startIndex = Math.max(0, startIndex - 1);
+    endIndex = Math.min(series.length - 1, endIndex + 1);
+
+    if (startIndex > endIndex) return [];
+
+    return series.slice(startIndex, endIndex + 1);
+  }
+
   _processHistory(rawHistory, learningEntityId, climateEntityId, startTime) {
     if (!Array.isArray(rawHistory)) {
-      this._history = { kint: [], kext: [], temp: [], heating: [], setpoint: [], startTime: startTime.getTime() };
+      this._history = { kint: [], kext: [], temp: [], heating: [], setpoint: [], extTemp: [], startTime: startTime.getTime() };
       return;
     }
 
-    const kintSeries = [];
-    const kextSeries = [];
-    const tempSeries = [];
-    const heatingSeries = [];
-    const setpointSeries = [];
-    const extTempSeries = [];
+    const series = {
+      kint: [],
+      kext: [],
+      temp: [],
+      heating: [],
+      setpoint: [],
+      extTemp: []
+    };
+
+    const safePush = (arr, t, val) => {
+      const floatVal = parseFloat(val);
+      if (!isNaN(floatVal)) arr.push({ t, val: floatVal });
+    };
 
     for (const entityHistory of rawHistory) {
       if (!entityHistory || entityHistory.length === 0) continue;
 
       const entityId = entityHistory[0].entity_id;
+      const isLearning = entityId === learningEntityId;
+      const isClimate = entityId === climateEntityId;
 
-      if (entityId === learningEntityId) {
-        for (const state of entityHistory) {
-          const t = new Date(state.last_updated).getTime();
-          const attrs = state.attributes;
+      if (!isLearning && !isClimate) continue;
 
-          if (attrs) {
-            if (attrs.calculated_coef_int !== undefined && attrs.calculated_coef_int !== null) {
-              const val = parseFloat(attrs.calculated_coef_int);
-              if (!isNaN(val)) kintSeries.push({ t, val });
-            }
-            if (attrs.calculated_coef_ext !== undefined && attrs.calculated_coef_ext !== null) {
-              const val = parseFloat(attrs.calculated_coef_ext);
-              if (!isNaN(val)) kextSeries.push({ t, val });
-            }
+      for (const state of entityHistory) {
+        const t = new Date(state.last_updated).getTime();
+        const attrs = state.attributes;
+        if (!attrs) continue;
+
+        if (isLearning) {
+          if (attrs.calculated_coef_int != null) safePush(series.kint, t, attrs.calculated_coef_int);
+          if (attrs.calculated_coef_ext != null) safePush(series.kext, t, attrs.calculated_coef_ext);
+        } else {
+          if (attrs.current_temperature != null) safePush(series.temp, t, attrs.current_temperature);
+          if (attrs.temperature != null) safePush(series.setpoint, t, attrs.temperature);
+          
+          let extTempVal = null;
+          if (attrs.specific_states?.ext_current_temperature != null) {
+            extTempVal = attrs.specific_states.ext_current_temperature;
+          } else if (attrs.ext_current_temperature != null) {
+            extTempVal = attrs.ext_current_temperature;
           }
-        }
-      } else if (entityId === climateEntityId) {
-        for (const state of entityHistory) {
-          const t = new Date(state.last_updated).getTime();
-          const attrs = state.attributes;
+          if (extTempVal != null) safePush(series.extTemp, t, extTempVal);
 
-          if (attrs) {
-            if (attrs.current_temperature !== undefined && attrs.current_temperature !== null) {
-              const val = parseFloat(attrs.current_temperature);
-              if (!isNaN(val)) tempSeries.push({ t, val });
-            }
-            if (attrs.temperature !== undefined && attrs.temperature !== null) {
-              const val = parseFloat(attrs.temperature);
-              if (!isNaN(val)) setpointSeries.push({ t, val });
-            }
-            // Check for external temperature in specific_states
-            let extTempVal = null;
-            if (attrs.specific_states && attrs.specific_states.ext_current_temperature !== undefined && attrs.specific_states.ext_current_temperature !== null) {
-              extTempVal = parseFloat(attrs.specific_states.ext_current_temperature);
-            }
-            // Also check direct attribute for compatibility
-            else if (attrs.ext_current_temperature !== undefined && attrs.ext_current_temperature !== null) {
-              extTempVal = parseFloat(attrs.ext_current_temperature);
-            }
-
-            if (extTempVal !== null && !isNaN(extTempVal)) {
-              extTempSeries.push({ t, val: extTempVal });
-            }
-            if (attrs.hvac_action !== undefined) {
-              const isHeating = attrs.hvac_action === 'heating' ? 1 : 0;
-              heatingSeries.push({ t, val: isHeating });
-            }
+          if (attrs.hvac_action !== undefined) {
+            series.heating.push({ t, val: attrs.hvac_action === 'heating' ? 1 : 0 });
           }
         }
       }
     }
 
+    // Sort all series by time just in case
+    for (const key in series) {
+      series[key].sort((a, b) => a.t - b.t);
+    }
+
     this._history = {
-      kint: kintSeries,
-      kext: kextSeries,
-      temp: tempSeries,
-      heating: heatingSeries,
-      setpoint: setpointSeries,
-      extTemp: extTempSeries,
+      ...series,
       startTime: startTime.getTime()
     };
   }
@@ -595,32 +645,26 @@ class AutoTPILearningCard extends LitElement {
 
     const findStepValue = (series, time) => {
       if (!series || series.length === 0) return null;
-      let val = null;
-      for (const p of series) {
-        if (p.t <= time) val = p.val;
-        else break;
+      // Find the index of the last point <= time
+      const index = this._bisectRight(series, time);
+      if (index >= 0 && index < series.length) {
+        return series[index].val;
       }
-      return val;
+      return null;
     };
 
     const findLinearValue = (series, time) => {
       if (!series || series.length === 0) return null;
+      
+      const index = this._bisectRight(series, time);
+      
+      // Before first point
+      if (index < 0) return series[0].val;
+      // After last point
+      if (index >= series.length - 1) return series[series.length - 1].val;
 
-      let p1 = null;
-      let p2 = null;
-
-      for (let i = 0; i < series.length; i++) {
-        if (series[i].t <= time) {
-          p1 = series[i];
-        } else {
-          p2 = series[i];
-          break;
-        }
-      }
-
-      if (!p1 && p2) return p2.val;
-      if (p1 && !p2) return p1.val;
-      if (!p1 && !p2) return null;
+      const p1 = series[index];
+      const p2 = series[index + 1];
 
       const t1 = p1.t;
       const t2 = p2.t;
@@ -857,12 +901,20 @@ class AutoTPILearningCard extends LitElement {
       return path;
     };
 
-    const kintPath = this._showKint ? createSteppedLinePath(kint, getY_Kint) : '';
-    const kextPath = this._showKext ? createSteppedLinePath(kext, getY_Kext) : '';
-    const tempPath = this._showTemp ? createLinePath(temp, getY_Temp) : '';
-    const extTempPath = this._showExtTemp ? createLinePath(extTemp, getY_Temp) : '';
-    const setpointPath = this._showSetpoint ? createSteppedLinePath(setpoint, getY_Temp) : '';
-    const setpointFilledPath = this._showSetpoint ? createFilledSteppedAreaPath(setpoint, getY_Temp) : '';
+    // --- OPTIMIZATION: Windowing / Culling ---
+    // Only process data points that are visible in the current time window
+    const visibleKint = this._showKint ? this._getVisibleData(kint, xMin, xMax) : [];
+    const visibleKext = this._showKext ? this._getVisibleData(kext, xMin, xMax) : [];
+    const visibleTemp = this._showTemp ? this._getVisibleData(temp, xMin, xMax) : [];
+    const visibleExtTemp = this._showExtTemp ? this._getVisibleData(extTemp, xMin, xMax) : [];
+    const visibleSetpoint = this._showSetpoint ? this._getVisibleData(setpoint, xMin, xMax) : [];
+
+    const kintPath = visibleKint.length > 0 ? createSteppedLinePath(visibleKint, getY_Kint) : '';
+    const kextPath = visibleKext.length > 0 ? createSteppedLinePath(visibleKext, getY_Kext) : '';
+    const tempPath = visibleTemp.length > 0 ? createLinePath(visibleTemp, getY_Temp) : '';
+    const extTempPath = visibleExtTemp.length > 0 ? createLinePath(visibleExtTemp, getY_Temp) : '';
+    const setpointPath = visibleSetpoint.length > 0 ? createSteppedLinePath(visibleSetpoint, getY_Temp) : '';
+    const setpointFilledPath = visibleSetpoint.length > 0 ? createFilledSteppedAreaPath(visibleSetpoint, getY_Temp) : '';
 
     const heatingRects = [];
     if (this._showHeating && heating.length > 0) {
@@ -870,14 +922,38 @@ class AutoTPILearningCard extends LitElement {
       const chartRight = width - padding.right;
       const chartBottom = padding.top + chartHeight;
 
-      for (let i = 0; i < heating.length - 1; i++) {
-        if (heating[i].val === 1) {
-          const x1 = getX(heating[i].t);
-          const x2 = getX(heating[i + 1].t);
+      // Use _getVisibleData logic but manually to handle the durations correctly
+      let startIndex = this._bisectLeft(heating, xMin);
+      let endIndex = this._bisectRight(heating, xMax);
+      
+      // Ensure we include the interval starting before the window
+      startIndex = Math.max(0, startIndex - 1);
+      // Ensure we check up to the end or slightly past
+      endIndex = Math.min(heating.length - 1, endIndex + 1);
 
-          // Clip the rectangle to the visible chart area
+      for (let i = startIndex; i <= endIndex; i++) {
+        if (!heating[i]) continue;
+        
+        if (heating[i].val === 1) {
+          const t1 = heating[i].t;
+          let t2;
+          
+          if (i < heating.length - 1) {
+            t2 = heating[i + 1].t;
+          } else {
+            t2 = Date.now();
+          }
+
+          // If the interval is completely outside the view, skip
+          if (t2 < xMin || t1 > xMax) continue;
+
+          const x1 = getX(t1);
+          const x2 = getX(t2);
+
           const rectX = Math.max(chartLeft, Math.min(x1, x2));
-          const rectWidth = Math.max(0, Math.min(chartRight, Math.max(x1, x2)) - rectX);
+          // Calculate effective end position constrained to chart area
+          const effectiveX2 = Math.min(chartRight, Math.max(x1, x2));
+          const rectWidth = effectiveX2 - rectX;
 
           if (rectWidth > 0) {
             heatingRects.push(svg`
@@ -891,28 +967,6 @@ class AutoTPILearningCard extends LitElement {
               />
             `);
           }
-        }
-      }
-      const last = heating[heating.length - 1];
-      if (last.val === 1) {
-        const x1 = getX(last.t);
-        const x2 = getX(Date.now());
-
-        // Clip the rectangle to the visible chart area
-        const rectX = Math.max(chartLeft, Math.min(x1, x2));
-        const rectWidth = Math.max(0, Math.min(chartRight, Math.max(x1, x2)) - rectX);
-
-        if (rectWidth > 0) {
-          heatingRects.push(svg`
-              <rect
-                x="${rectX}"
-                y="${chartBottom - 20}"
-                width="${rectWidth}"
-                height="20"
-                fill="rgba(255, 152, 0, 0.5)"
-                clip-path="url(#chart-clip)"
-              />
-            `);
         }
       }
     }
