@@ -1357,6 +1357,10 @@ class AutoTPILearningCard extends LitElement {
       opacity: 0.7;
       margin-top: 4px;
       font-size: 12px;
+      overflow-wrap: anywhere;
+      word-break: break-word; /* Deprecated but useful fallback */
+      word-break: break-all;  /* Force break for long strings */
+      display: block;         /* Ensure block layout for text wrapping */
     }
     .label {
       font-weight: 500;
@@ -1415,8 +1419,9 @@ class AutoTPILearningCard extends LitElement {
     .legend {
       display: flex;
       justify-content: center;
+      flex-wrap: wrap;
       gap: 16px;
-      font-size: 14px;
+      font-size: 12px;
       margin-top: 8px;
     }
     .legend-item {
