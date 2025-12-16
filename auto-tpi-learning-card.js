@@ -106,16 +106,16 @@ class AutoTPILearningCard extends LitElement {
   }
 
   getCardSize() {
-    return 5;
+    // return 10;
   }
 
   getLayoutOptions() {
     return {
-      grid_columns: 4,
-      grid_min_columns: 2,
-      grid_rows: 5,
-      grid_min_rows: 5
-    };
+    //   grid_columns: 12,
+    //   grid_min_columns: 6,
+    //   grid_rows: 1,
+    //   grid_min_rows: 1
+     };
   }
 
   shouldUpdate(changedProps) {
@@ -867,7 +867,7 @@ class AutoTPILearningCard extends LitElement {
     const { kint, kext, temp, heating, setpoint, extTemp } = this._history;
 
     const width = this._width > 0 ? this._width : 800;
-    const height = 350;
+    const height = 300;
 
     const padding = { top: 40, right: 60, bottom: 60, left: 60 };
     const chartWidth = width - padding.left - padding.right;
@@ -1325,9 +1325,14 @@ class AutoTPILearningCard extends LitElement {
       border-radius: var(--ha-card-border-radius, 12px);
       box-shadow: var(--ha-card-box-shadow);
       color: var(--primary-text-color);
+      display: flex;
+      flex-direction: column;
     }
     .card-content {
       padding: 16px;
+      display: flex;
+      flex-direction: column;
+      flex: 1;
     }
     .header {
       font-size: 16px;
@@ -1363,7 +1368,7 @@ class AutoTPILearningCard extends LitElement {
     
     .chart-container {
       width: 100%;
-      height: 350px;
+      height: 300px;
       position: relative;
       margin-bottom: 8px;
       overflow: hidden;
