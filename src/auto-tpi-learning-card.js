@@ -517,18 +517,18 @@ class AutoTPILearningCard extends LitElement {
     return pt.matrixTransform(svg.getScreenCTM().inverse());
   }
 
-  _handleTouchMove(e, xMin, xMax, chartWidth, chartHeight, padding, kint, kext, temp, getY_Kint, getY_Kext, getY_Temp) {
+  _handleTouchMove(e, xMin, xMax, chartWidth, chartHeight, padding, kint, kext, temp, extTemp, setpoint, getY_Kint, getY_Kext, getY_Temp) {
     e.preventDefault();
     const svg = e.currentTarget;
     const touch = e.touches[0];
     const { x, y } = this._getSVGPoint(svg, touch.clientX, touch.clientY);
-    this._processCursorMove(x, y, xMin, xMax, chartWidth, chartHeight, padding, kint, kext, temp, getY_Kint, getY_Kext, getY_Temp);
+    this._processCursorMove(x, y, xMin, xMax, chartWidth, chartHeight, padding, kint, kext, temp, extTemp, setpoint, getY_Kint, getY_Kext, getY_Temp);
   }
 
-  _handleMouseMove(e, xMin, xMax, chartWidth, chartHeight, padding, kint, kext, temp, getY_Kint, getY_Kext, getY_Temp) {
+  _handleMouseMove(e, xMin, xMax, chartWidth, chartHeight, padding, kint, kext, temp, extTemp, setpoint, getY_Kint, getY_Kext, getY_Temp) {
     const svg = e.currentTarget;
     const { x, y } = this._getSVGPoint(svg, e.clientX, e.clientY);
-    this._processCursorMove(x, y, xMin, xMax, chartWidth, chartHeight, padding, kint, kext, temp, getY_Kint, getY_Kext, getY_Temp);
+    this._processCursorMove(x, y, xMin, xMax, chartWidth, chartHeight, padding, kint, kext, temp, extTemp, setpoint, getY_Kint, getY_Kext, getY_Temp);
   }
   _handleMouseDown(e) {
     this._isDragging = true;
@@ -720,7 +720,7 @@ class AutoTPILearningCard extends LitElement {
     }
   }
 
-  _processCursorMove(mouseX, mouseY, xMin, xMax, chartWidth, chartHeight, padding, kint, kext, temp, getY_Kint, getY_Kext, getY_Temp) {
+  _processCursorMove(mouseX, mouseY, xMin, xMax, chartWidth, chartHeight, padding, kint, kext, temp, extTemp, setpoint, getY_Kint, getY_Kext, getY_Temp) {
     const x = mouseX - padding.left;
 
     if (x < 0 || x > chartWidth) {
@@ -764,30 +764,45 @@ class AutoTPILearningCard extends LitElement {
       return v1 + (v2 - v1) * factor;
     };
 
-    const kintValue = findStepValue(kint, t);
-    const kextValue = findStepValue(kext, t);
+    const kintValue = this._showKint ? findStepValue(kint, t) : null;
+    const kextValue = this._showKext ? findStepValue(kext, t) : null;
     const tempValue = this._showTemp ? findLinearValue(temp, t) : null;
+    const extTempValue = this._showExtTemp ? findLinearValue(extTemp, t) : null;
+    const setpointValue = this._showSetpoint ? findStepValue(setpoint, t) : null;
 
-    let yKint = Infinity, yKext = Infinity, yTemp = Infinity;
+    let yKint = Infinity, yKext = Infinity, yTemp = Infinity, yExtTemp = Infinity, ySetpoint = Infinity;
 
     if (kintValue !== null) yKint = getY_Kint(kintValue);
     if (kextValue !== null) yKext = getY_Kext(kextValue);
     if (tempValue !== null) yTemp = getY_Temp(tempValue);
+    if (extTempValue !== null) yExtTemp = getY_Temp(extTempValue);
+    if (setpointValue !== null) ySetpoint = getY_Temp(setpointValue);
 
     const distKint = Math.abs(mouseY - yKint);
     const distKext = Math.abs(mouseY - yKext);
     const distTemp = Math.abs(mouseY - yTemp);
+    const distExtTemp = Math.abs(mouseY - yExtTemp);
+    const distSetpoint = Math.abs(mouseY - ySetpoint);
 
     let active = 'kint';
     let minDist = distKint;
 
     if (distKext < minDist) { minDist = distKext; active = 'kext'; }
     if (distTemp < minDist) { minDist = distTemp; active = 'temp'; }
+    if (distExtTemp < minDist) { minDist = distExtTemp; active = 'extTemp'; }
+    if (distSetpoint < minDist) { minDist = distSetpoint; active = 'setpoint'; }
+
+    // Check threshold (e.g. 50px)
+    if (minDist > 50) {
+      this._tooltip = null;
+      return;
+    }
 
     let activeValue = kintValue;
     let activeColor = 'rgb(255, 235, 59)';
     let activeTitle = 'Coef INT';
     let activeY = yKint;
+    let precision = 4;
 
     if (active === 'kext') {
       activeValue = kextValue;
@@ -799,6 +814,19 @@ class AutoTPILearningCard extends LitElement {
       activeColor = 'rgb(33, 150, 243)';
       activeTitle = 'Température';
       activeY = yTemp;
+      precision = 1;
+    } else if (active === 'extTemp') {
+      activeValue = extTempValue;
+      activeColor = 'rgb(25, 50, 100)';
+      activeTitle = 'Ext Temp';
+      activeY = yExtTemp;
+      precision = 1;
+    } else if (active === 'setpoint') {
+      activeValue = setpointValue;
+      activeColor = 'rgba(255, 152, 0, 0.8)';
+      activeTitle = 'Consigne';
+      activeY = ySetpoint;
+      precision = 1;
     }
 
     if (activeValue === null) {
@@ -813,7 +841,8 @@ class AutoTPILearningCard extends LitElement {
       value: activeValue,
       color: activeColor,
       title: activeTitle,
-      targetY: activeY
+      targetY: activeY,
+      precision
     };
   }
 
@@ -848,7 +877,7 @@ class AutoTPILearningCard extends LitElement {
       ">
         <div style="font-weight: bold; font-size: 1.1em; margin-bottom: 2px;">${this._tooltip.title}</div>
         <div style="font-size: 0.9em; opacity: 0.8; margin-bottom: 4px;">${dateStr}</div>
-        <div style="font-weight: bold; font-size: 1.2em;">${this._tooltip.value.toFixed(1)}</div>
+        <div style="font-weight: bold; font-size: 1.2em;">${this._tooltip.value.toFixed(this._tooltip.precision)}</div>
       </div>
     `;
   }
@@ -894,18 +923,45 @@ class AutoTPILearningCard extends LitElement {
       return padding.left + ((t - xMin) / (xMax - xMin)) * chartWidth;
     };
 
-    const kintMin = 0;
-    const kintMax = 1;
+    // Dynamic scaling for Kint
+    let kintMin = 0;
+    let kintMax = 1;
+    if (kint.length > 0) {
+      let minVal = Infinity;
+      let maxVal = -Infinity;
+      for (let i = 0; i < kint.length; i++) {
+        const v = kint[i].val;
+        if (v < minVal) minVal = v;
+        if (v > maxVal) maxVal = v;
+      }
+      kintMin = Math.min(0, minVal);
+      kintMax = Math.max(1, maxVal);
+      if (kintMax > 1) kintMax = Math.ceil(kintMax * 10) / 10;
+    }
+
     const getY_Kint = (val) => {
       const baseY = padding.top + chartHeight - ((val - kintMin) / (kintMax - kintMin)) * chartHeight;
       return this._applyYZoom(baseY, padding.top, chartHeight);
     };
 
-    const kextMin = 0;
-    const kextMax = 0.1;
+    // Dynamic scaling for Kext
+    let kextMin = 0;
+    let kextMax = 0.1;
+    if (kext.length > 0) {
+      let minVal = Infinity;
+      let maxVal = -Infinity;
+      for (let i = 0; i < kext.length; i++) {
+        const v = kext[i].val;
+        if (v < minVal) minVal = v;
+        if (v > maxVal) maxVal = v;
+      }
+      kextMin = Math.min(0, minVal);
+      kextMax = Math.max(0.1, maxVal);
+      if (kextMax > 0.1) kextMax = Math.ceil(kextMax * 100) / 100;
+    }
+
     const getY_Kext = (val) => {
-      const v = Math.max(kextMin, Math.min(kextMax, val));
-      const baseY = padding.top + chartHeight - ((v - kextMin) / (kextMax - kextMin)) * chartHeight;
+      const baseY = padding.top + chartHeight - ((val - kextMin) / (kextMax - kextMin)) * chartHeight;
       return this._applyYZoom(baseY, padding.top, chartHeight);
     };
 
@@ -1058,7 +1114,14 @@ class AutoTPILearningCard extends LitElement {
       }
     }
 
-    const kintGrid = [0, 0.25, 0.5, 0.75, 1.0].map(val => {
+    const kintTicks = [];
+    const kintStep = kintMax > 2 ? 0.5 : 0.25;
+    const kintStart = Math.ceil(kintMin / kintStep) * kintStep;
+    for (let v = kintStart; v <= kintMax + 0.001; v += kintStep) {
+      kintTicks.push(v);
+    }
+
+    const kintGrid = kintTicks.map(val => {
       const y = getY_Kint(val);
       return svg`
         <line 
@@ -1075,7 +1138,14 @@ class AutoTPILearningCard extends LitElement {
       `;
     });
 
-    const kextLabels = [0, 0.05, 0.1].map(val => {
+    const kextTicks = [];
+    const kextStep = kextMax > 0.5 ? 0.1 : 0.05;
+    const kextStart = Math.ceil(kextMin / kextStep) * kextStep;
+    for (let v = kextStart; v <= kextMax + 0.0001; v += kextStep) {
+      kextTicks.push(v);
+    }
+
+    const kextLabels = kextTicks.map(val => {
       const y = getY_Kext(val);
       return svg`
         <text 
@@ -1178,7 +1248,7 @@ class AutoTPILearningCard extends LitElement {
         @mousemove="${(e) => {
         this._handleMouseMove_Drag(e);
         if (!this._isDragging) {
-          this._handleMouseMove(e, xMin, xMax, chartWidth, chartHeight, padding, kint, kext, temp, getY_Kint, getY_Kext, getY_Temp);
+          this._handleMouseMove(e, xMin, xMax, chartWidth, chartHeight, padding, kint, kext, temp, extTemp, setpoint, getY_Kint, getY_Kext, getY_Temp);
         }
       }}"
         @mouseup="${(e) => this._handleMouseUp(e)}"
@@ -1190,7 +1260,7 @@ class AutoTPILearningCard extends LitElement {
         @touchmove="${(e) => {
         this._handleTouchMove_Drag(e);
         if (!this._isDragging && !this._isPinching) {
-          this._handleTouchMove(e, xMin, xMax, chartWidth, chartHeight, padding, kint, kext, temp, getY_Kint, getY_Kext, getY_Temp);
+          this._handleTouchMove(e, xMin, xMax, chartWidth, chartHeight, padding, kint, kext, temp, extTemp, setpoint, getY_Kint, getY_Kext, getY_Temp);
         }
       }}"
         @touchend="${(e) => this._handleTouchEnd(e)}"
