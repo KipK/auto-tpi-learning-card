@@ -923,7 +923,7 @@ class AutoTPILearningCard extends LitElement {
     const width = this._width > 0 ? this._width : 800;
     const height = 300;
 
-    const padding = { top: 40, right: 60, bottom: 60, left: 60 };
+    const padding = { top: 10, right: 60, bottom: 40, left: 60 };
     const chartWidth = width - padding.left - padding.right;
     const chartHeight = height - padding.top - padding.bottom;
 
@@ -1304,30 +1304,30 @@ class AutoTPILearningCard extends LitElement {
           <div class="header">${this.config.name || 'Auto-TPI Learning'}</div>
 
           <div class="telemetry">
-            <div class="telem-line">
-              <span class="label">State:</span>
-              <span style="${isStateOn ? 'color: var(--success-color, #4CAF50); font-weight: bold;' : ''}">${autoTpiState}</span>
-              &nbsp;|&nbsp;
-              <span class="label">Confidence:</span> ${confidence}%
-            </div>
-
-            <div class="telem-line" style="align-items: flex-start;">
-              <div style="display: flex; flex-direction: column; margin-right: 24px;">
-                <span class="kint-color">Kint: ${learningData.kint.toFixed(4)}</span>
-                <span style="font-size: 0.9em; opacity: 0.8;">Cycles: ${learningData.kintCycles}</span>
+            <div class="telemetry-content">
+              <div class="telem-line">
+                <span class="label">State:</span>
+                <span style="${isStateOn ? 'color: var(--success-color, #4CAF50); font-weight: bold;' : ''}">${autoTpiState}</span>
+                &nbsp;|&nbsp;
+                <span class="label">Confidence:</span> ${confidence}%
               </div>
-              <div style="display: flex; flex-direction: column;">
-                <span class="kext-color">Kext: ${learningData.kext.toFixed(4)}</span>
-                <span style="font-size: 0.9em; opacity: 0.8;">Cycles: ${learningData.kextCycles}</span>
+
+              <div class="telem-line" style="align-items: flex-start;">
+                <div style="display: flex; flex-direction: column; margin-right: 24px;">
+                  <span class="kint-color">Kint: ${learningData.kint.toFixed(4)}</span>
+                  <span style="font-size: 0.9em; opacity: 0.8;">Cycles: ${learningData.kintCycles}</span>
+                </div>
+                <div style="display: flex; flex-direction: column;">
+                  <span class="kext-color">Kext: ${learningData.kext.toFixed(4)}</span>
+                  <span style="font-size: 0.9em; opacity: 0.8;">Cycles: ${learningData.kextCycles}</span>
+                </div>
+              </div>
+
+              <div class="telem-line status">
+                ${status}
               </div>
             </div>
-
-            <div class="telem-line status">
-              ${status}
-            </div>
-          </div>
-
-          <div class="chart-container">
+            
             <div class="zoom-controls">
               <ha-icon-button @click="${() => this._zoomIn()}">
                 <ha-icon icon="mdi:magnify-plus-outline"></ha-icon>
@@ -1339,6 +1339,8 @@ class AutoTPILearningCard extends LitElement {
                 <ha-icon icon="mdi:magnify-minus-outline"></ha-icon>
               </ha-icon-button>
             </div>
+          </div>
+
             ${this._renderChart()}
             ${this._renderTooltip()}
           </div>
@@ -1392,10 +1394,17 @@ class AutoTPILearningCard extends LitElement {
       margin-bottom: 16px;
     }
     .telemetry {
-      margin-bottom: 16px;
+      margin-bottom: 4px; /* Reduced from 16px */
       background: rgba(0,0,0,0.1);
       padding: 8px;
       border-radius: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+    }
+    .telemetry-content {
+      display: flex;
+      flex-direction: column;
     }
     .telem-line {
       font-size: 13px;
@@ -1426,19 +1435,12 @@ class AutoTPILearningCard extends LitElement {
       width: 100%;
       height: 300px;
       position: relative;
-      margin-bottom: 8px;
+      margin-bottom: 0px; /* Reduced from 8px */
       overflow: hidden;
     }
     .zoom-controls {
-      position: absolute;
-      top: -5px;
-      right: 0px;
       display: flex;
       gap: 4px;
-      z-index: 5;
-      background: var(--ha-card-background, var(--card-background-color));
-      border-radius: 0px;
-      padding: 4px;
     }
     .zoom-controls ha-icon-button {
       --mdc-icon-button-size: 32px;
@@ -1472,9 +1474,9 @@ class AutoTPILearningCard extends LitElement {
       display: flex;
       justify-content: center;
       flex-wrap: wrap;
-      gap: 16px;
+      gap: 12px;
       font-size: 12px;
-      margin-top: 8px;
+      margin-top: -10px;
     }
     .legend-item {
       display: flex;
