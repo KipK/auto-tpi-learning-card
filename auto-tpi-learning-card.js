@@ -305,7 +305,6 @@ class AutoTPILearningCard extends LitElement {
   }
 
   _handleWheel(e) {
-    console.log("Wheel event triggered!", e.deltaY);
     e.preventDefault();
 
     if (!this._history) return;
@@ -315,74 +314,69 @@ class AutoTPILearningCard extends LitElement {
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
 
-    // Calculer la position relative dans le graphique (0 à 1)
+    // Calculate chart dimensions and padding
     const padding = { left: 60, right: 60, top: 40, bottom: 60 };
     const chartWidth = rect.width - padding.left - padding.right;
     const chartHeight = rect.height - padding.top - padding.bottom;
-    const relativeX = (mouseX - padding.left) / chartWidth;
-    const relativeY = (mouseY - padding.top) / chartHeight;
+    const clampedX = Math.max(0, Math.min(1, (mouseX - padding.left) / chartWidth));
 
-    // Clamp entre 0 et 1
-    const clampedX = Math.max(0, Math.min(1, relativeX));
-    const clampedY = Math.max(0, Math.min(1, relativeY));
-
+    // --- X-AXIS ZOOM CALCULATION ---
     const now = Date.now();
     const startTime = this._history.startTime;
     const totalDuration = Math.max(now - startTime, 6 * 60 * 60 * 1000);
+    const currentVisibleDuration = totalDuration / this._zoomLevel;
+    
+    // Calculate the time currently under the cursor
+    const timeUnderCursor = startTime + this._panOffset + (clampedX * currentVisibleDuration);
 
-    // Calculer le temps actuel sous le curseur
-    const visibleDuration = totalDuration / this._zoomLevel;
-    const currentTimeUnderCursor = startTime + this._panOffset + (clampedX * visibleDuration);
-
-    // Appliquer le zoom
+    // --- Y-AXIS ZOOM CALCULATION ---
+    // Calculate the normalized value (0-1) currently under the cursor
+    const valueNormUnderCursor = this._getYValueFromPosition(mouseY, padding.top, chartHeight);
+    
+    // --- APPLY NEW ZOOM ---
     const delta = e.deltaY;
-    const zoomFactor = delta > 0 ? 0.9 : 1.1;
-
-    // Zoom X (time axis) - center on initial cursor position
-    const newZoomLevel = Math.max(1, Math.min(10, this._zoomLevel * zoomFactor));
-    const newVisibleDuration = totalDuration / newZoomLevel;
-    // Calculate pan offset to keep the cursor position stable during zoom
-    const timeUnderCursorBeforeZoom = startTime + this._panOffset + (clampedX * visibleDuration);
-    this._panOffset = timeUnderCursorBeforeZoom - startTime - (clampedX * newVisibleDuration);
+    const zoomFactor = delta > 0 ? 0.9 : 1.1; // Zoom out / Zoom in
+    const newZoomLevel = Math.max(1, Math.min(20, this._zoomLevel * zoomFactor));
+    const newYZoomLevel = Math.max(1, Math.min(20, this._yZoomLevel * zoomFactor));
+    
+    // --- UPDATE STATE ---
     this._zoomLevel = newZoomLevel;
-
-    // Zoom Y (value axis) - center on initial cursor position
-    const newYZoomLevel = Math.max(1, Math.min(10, this._yZoomLevel * zoomFactor));
-
-    // Calculate Y value under cursor to maintain position during zoom
-    const cursorYPos = mouseY;
-    const chartTop = padding.top;
-    const chartBottom = rect.height - padding.bottom;
-
-    // Calculate the Y value that should remain under the cursor after zoom
-    // We need to convert cursor position to value space, then back after zoom
-    const cursorYRelative = (cursorYPos - chartTop) / chartHeight;
-
-    // For proper zoom centering, we calculate the pan adjustment needed
-    // to keep the same relative position under the cursor
-    const zoomChangeFactor = (newYZoomLevel - this._yZoomLevel) / newYZoomLevel;
-    const cursorFromCenter = cursorYPos - (chartTop + chartHeight / 2);
-    const panAdjustment = cursorFromCenter * zoomChangeFactor;
-
-    this._yPanOffset = this._yPanOffset + panAdjustment;
     this._yZoomLevel = newYZoomLevel;
 
-    // Reset pan offsets when returning to 100% zoom to ensure proper centering
-    if (newYZoomLevel === 1) {
-        this._yPanOffset = 0;
-    }
-    if (newZoomLevel === 1) {
-        this._panOffset = 0;
-    }
+    // --- RE-CALCULATE OFFSETS TO ANCHOR CURSOR ---
+    
+    // 1. Anchor X-Axis
+    const newVisibleDuration = totalDuration / newZoomLevel;
+    // We want: timeUnderCursor = startTime + newPanOffset + (clampedX * newVisibleDuration)
+    this._panOffset = timeUnderCursor - startTime - (clampedX * newVisibleDuration);
+
+    // 2. Anchor Y-Axis
+    // We want the screen position of valueNormUnderCursor to remain at mouseY
+    // Formula: ScreenY = CenterY + (BaseY - CenterY) * Zoom + PanOffset
+    // Where BaseY = Top + Height - (ValueNorm * Height)
+    
+    const centerY = padding.top + chartHeight / 2;
+    const baseY = padding.top + chartHeight - (valueNormUnderCursor * chartHeight);
+    
+    // Solve for PanOffset: PanOffset = ScreenY - (CenterY + (BaseY - CenterY) * Zoom)
+    this._yPanOffset = mouseY - (centerY + (baseY - centerY) * this._yZoomLevel);
+
+    // Reset pan offsets when returning to 100% zoom (optional but cleaner)
+    if (this._zoomLevel === 1) this._panOffset = 0;
+    if (this._yZoomLevel === 1) this._yPanOffset = 0;
 
     this._clampPanOffset();
-    this._clampYPanOffset();
+    
+    // Clear tooltip to avoid "ghosting" or update it immediately
+    // For now, clearing it is safer and simpler. The user will move mouse slightly and it will reappear correctly.
+    this._tooltip = null;
+    
     this.requestUpdate();
   }
 
   _zoomIn() {
-    this._zoomLevel = Math.min(10, this._zoomLevel * 1.2);
-    this._yZoomLevel = Math.min(10, this._yZoomLevel * 1.2);
+    this._zoomLevel = Math.min(20, this._zoomLevel * 1.2);
+    this._yZoomLevel = Math.min(20, this._yZoomLevel * 1.2);
     this._clampPanOffset();
     this._clampYPanOffset();
     this.requestUpdate();
@@ -428,8 +422,8 @@ class AutoTPILearningCard extends LitElement {
   _clampYPanOffset() {
     // Y-axis clamping - we'll implement this based on the visible range
     // For now, just ensure it doesn't go too far
-    const maxYOffset = 1000; // This will be calculated more precisely later
-    const minYOffset = -1000;
+    const maxYOffset = 10000;
+    const minYOffset = -10000;
     this._yPanOffset = Math.max(minYOffset, Math.min(maxYOffset, this._yPanOffset));
   }
 
@@ -438,32 +432,27 @@ class AutoTPILearningCard extends LitElement {
       return baseY;
     }
 
-    // Calculate the center of the chart
+    // Apply zoom centered around chart center, then apply pan
+    // This creates a consistent zoom experience similar to X-axis
     const centerY = chartTop + chartHeight / 2;
-
-    // Apply zoom by moving points toward/away from center
-    const zoomFactor = this._yZoomLevel;
     const yFromCenter = baseY - centerY;
-    const zoomedY = centerY + yFromCenter * zoomFactor;
+    const zoomedY = centerY + yFromCenter * this._yZoomLevel;
 
-    // Apply pan offset
+    // Apply pan offset to the zoomed position
     return zoomedY + this._yPanOffset;
   }
 
   _getYValueFromPosition(yPos, chartTop, chartHeight) {
-    // Convert Y position back to value space for cursor position calculation
-    if (this._yZoomLevel === 1 && this._yPanOffset === 0) {
-      // No zoom, simple linear mapping
-      return (chartTop + chartHeight - yPos) / chartHeight;
-    }
-
-    // Reverse the zoom transformation
+    // Inverse of _applyYZoom
+    // Forward: ScreenY = CenterY + (BaseY - CenterY) * Zoom + PanOffset
+    // Inverse: BaseY = CenterY + (ScreenY - PanOffset - CenterY) / Zoom
+    
     const centerY = chartTop + chartHeight / 2;
-    const zoomedY = yPos - this._yPanOffset;
-    const yFromCenter = zoomedY - centerY;
-    const baseY = centerY + yFromCenter / this._yZoomLevel;
-
-    // Convert to normalized value (0-1)
+    const baseY = centerY + (yPos - this._yPanOffset - centerY) / this._yZoomLevel;
+    
+    // Convert pixel position (BaseY) to normalized value (0-1)
+    // BaseY = Top + Height - (Value * Height)
+    // Value = (Top + Height - BaseY) / Height
     return (chartTop + chartHeight - baseY) / chartHeight;
   }
 
@@ -503,32 +492,45 @@ class AutoTPILearningCard extends LitElement {
     const rect = svg.getBoundingClientRect();
     const padding = { left: 60, right: 60, top: 40, bottom: 60 };
     const chartWidth = rect.width - padding.left - padding.right;
-    const chartHeight = rect.height - padding.top - padding.bottom;
 
     const deltaX = this._dragStartX - e.clientX;
     const deltaY = this._dragStartY - e.clientY;
 
+    // --- X-Axis Drag ---
     const now = Date.now();
     const startTime = this._history.startTime;
     const totalDuration = Math.max(now - startTime, 6 * 60 * 60 * 1000);
     const visibleDuration = totalDuration / this._zoomLevel;
 
-    // Convert pixel delta to time delta for X-axis
+    // Dragging mouse LEFT (positive deltaX) means moving view RIGHT (increasing time offset)
     const deltaTime = (deltaX / chartWidth) * visibleDuration;
     this._panOffset = this._dragStartOffset + deltaTime;
     this._clampPanOffset();
 
-    // Only allow Y-axis dragging if Y zoom is greater than 1
+    // --- Y-Axis Drag ---
     if (this._yZoomLevel > 1) {
-      // Convert pixel delta to value delta for Y-axis
-      // Y-axis uses a different scale - we need to convert pixels to value units
-      // Note: We invert the deltaY because dragging up should move content up (show higher values)
-      const deltaYPixels = -deltaY; // Invert the direction
-      const yScaleFactor = chartHeight / 100; // Assume 100 units range for Y-axis
-      const deltaYValue = (deltaYPixels / chartHeight) * 100 * this._yZoomLevel;
-
-      this._yPanOffset = this._dragStartYOffset + deltaYValue;
-      this._clampYPanOffset();
+      // Dragging mouse UP (positive deltaY because delta = start - current)
+      // If we drag UP, we want to see lower values?
+      // Standard "pan" logic: Dragging content UP means view moves DOWN relative to content.
+      // But usually "hand tool": Dragging UP moves the viewport UP (showing lower parts).
+      // Wait. e.clientY decreases when going UP.
+      // deltaY = Start - Current. Moving UP -> Current < Start -> deltaY > 0.
+      // If I drag UP, I expect the chart to move UP with my mouse.
+      // Moving chart UP means increasing the Y-offset (since Y-offset is added to screen position).
+      // So if deltaY > 0 (drag up), we want positive change in PanOffset.
+      
+      // However, let's verify direction.
+      // If I click and drag UP, the content should follow the mouse.
+      // So the pixel under my mouse should effectively stay under my mouse.
+      // NewY = OldY + (CurrentMouse - StartMouse)
+      // NewOffset = OldOffset + (CurrentMouse - StartMouse)
+      // CurrentMouse - StartMouse = -deltaY.
+      // So NewOffset = OldOffset - deltaY.
+      
+      this._yPanOffset = this._dragStartYOffset - deltaY;
+      
+      // No strict clamping for Y panning yet as it's infinite canvas essentially,
+      // but we can limit it if needed. For now, free panning is fine or minimal clamping.
     }
   }
 
@@ -554,7 +556,6 @@ class AutoTPILearningCard extends LitElement {
     const rect = svg.getBoundingClientRect();
     const padding = { left: 60, right: 60, top: 40, bottom: 60 };
     const chartWidth = rect.width - padding.left - padding.right;
-    const chartHeight = rect.height - padding.top - padding.bottom;
 
     const deltaX = this._dragStartX - e.touches[0].clientX;
     const deltaY = this._dragStartY - e.touches[0].clientY;
@@ -571,14 +572,8 @@ class AutoTPILearningCard extends LitElement {
 
     // Only allow Y-axis dragging if Y zoom is greater than 1
     if (this._yZoomLevel > 1) {
-      // Convert pixel delta to value delta for Y-axis
-      // Note: We invert the deltaY because dragging up should move content up (show higher values)
-      const deltaYPixels = -deltaY; // Invert the direction
-      const yScaleFactor = chartHeight / 100; // Assume 100 units range for Y-axis
-      const deltaYValue = (deltaYPixels / chartHeight) * 100 * this._yZoomLevel;
-
-      this._yPanOffset = this._dragStartYOffset + deltaYValue;
-      this._clampYPanOffset();
+      // Same logic as mouse drag
+      this._yPanOffset = this._dragStartYOffset - deltaY;
     }
   }
 
