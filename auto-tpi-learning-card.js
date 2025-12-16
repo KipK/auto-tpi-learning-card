@@ -26,7 +26,11 @@ class AutoTPILearningCard extends LitElement {
     _yPanOffset: { type: Number },
     _isYDragging: { type: Boolean },
     _dragStartY: { type: Number },
-    _dragStartYOffset: { type: Number }
+    _dragStartYOffset: { type: Number },
+    _isPinching: { type: Boolean },
+    _pinchStartDist: { type: Number },
+    _pinchStartZoom: { type: Number },
+    _pinchStartYZoom: { type: Number }
   };
 
   static getConfigElement() {
@@ -592,44 +596,127 @@ class AutoTPILearningCard extends LitElement {
   _handleTouchStart(e) {
     if (e.touches.length === 1) {
       this._isDragging = true;
+      this._isPinching = false;
       this._dragStartX = e.touches[0].clientX;
       this._dragStartY = e.touches[0].clientY;
       this._dragStartOffset = this._panOffset;
       this._dragStartYOffset = this._yPanOffset;
+    } else if (e.touches.length === 2) {
+      this._isDragging = false;
+      this._isPinching = true;
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      this._pinchStartDist = Math.hypot(dx, dy);
+      this._pinchStartZoom = this._zoomLevel;
+      this._pinchStartYZoom = this._yZoomLevel;
     }
   }
 
   _handleTouchMove_Drag(e) {
-    if (!this._isDragging || !this._history || e.touches.length !== 1) return;
+    if (!this._history) return;
 
     const svg = e.currentTarget;
     const rect = svg.getBoundingClientRect();
     const padding = { left: 60, right: 60, top: 40, bottom: 60 };
     const chartWidth = rect.width - padding.left - padding.right;
+    const chartHeight = rect.height - padding.top - padding.bottom;
 
-    const deltaX = this._dragStartX - e.touches[0].clientX;
-    const deltaY = this._dragStartY - e.touches[0].clientY;
+    if (this._isDragging && e.touches.length === 1) {
+      e.preventDefault();
+      
+      const deltaX = this._dragStartX - e.touches[0].clientX;
+      const deltaY = this._dragStartY - e.touches[0].clientY;
 
-    const now = Date.now();
-    const startTime = this._history.startTime;
-    const totalDuration = Math.max(now - startTime, 6 * 60 * 60 * 1000);
-    const visibleDuration = totalDuration / this._zoomLevel;
+      const now = Date.now();
+      const startTime = this._history.startTime;
+      const totalDuration = Math.max(now - startTime, 6 * 60 * 60 * 1000);
+      const visibleDuration = totalDuration / this._zoomLevel;
 
-    // Convert pixel delta to time delta for X-axis
-    const deltaTime = (deltaX / chartWidth) * visibleDuration;
-    this._panOffset = this._dragStartOffset + deltaTime;
-    this._clampPanOffset();
+      // Convert pixel delta to time delta for X-axis
+      const deltaTime = (deltaX / chartWidth) * visibleDuration;
+      this._panOffset = this._dragStartOffset + deltaTime;
+      this._clampPanOffset();
 
-    // Only allow Y-axis dragging if Y zoom is greater than 1
-    if (this._yZoomLevel > 1) {
-      // Same logic as mouse drag
-      this._yPanOffset = this._dragStartYOffset - deltaY;
+      // Only allow Y-axis dragging if Y zoom is greater than 1
+      if (this._yZoomLevel > 1) {
+        this._yPanOffset = this._dragStartYOffset - deltaY;
+      }
+    } else if (this._isPinching && e.touches.length === 2) {
+      e.preventDefault();
+
+      const t1 = e.touches[0];
+      const t2 = e.touches[1];
+
+      const dx = t1.clientX - t2.clientX;
+      const dy = t1.clientY - t2.clientY;
+      const newDist = Math.hypot(dx, dy);
+
+      if (this._pinchStartDist <= 10) return;
+
+      const scale = newDist / this._pinchStartDist;
+
+      // Calculate center of pinch
+      const centerX = (t1.clientX + t2.clientX) / 2;
+      const centerY = (t1.clientY + t2.clientY) / 2;
+      const mouseX = centerX - rect.left;
+      const mouseY = centerY - rect.top;
+
+      // --- X-AXIS Zoom ---
+      const clampedX = Math.max(0, Math.min(1, (mouseX - padding.left) / chartWidth));
+      
+      const now = Date.now();
+      const startTime = this._history.startTime;
+      const totalDuration = Math.max(now - startTime, 6 * 60 * 60 * 1000);
+      const currentVisibleDuration = totalDuration / this._zoomLevel;
+      
+      // Time under pinch center before zoom
+      const timeUnderCursor = startTime + this._panOffset + (clampedX * currentVisibleDuration);
+
+      // --- Y-AXIS Zoom ---
+      // Value under pinch center before zoom
+      const valueNormUnderCursor = this._getYValueFromPosition(mouseY, padding.top, chartHeight);
+
+      // --- APPLY ZOOM ---
+      const newZoomLevel = Math.max(1, Math.min(20, this._pinchStartZoom * scale));
+      const newYZoomLevel = Math.max(1, Math.min(20, this._pinchStartYZoom * scale));
+
+      this._zoomLevel = newZoomLevel;
+      this._yZoomLevel = newYZoomLevel;
+
+      // --- RE-CALCULATE OFFSETS ---
+      
+      // 1. Anchor X-Axis
+      const newVisibleDuration = totalDuration / newZoomLevel;
+      this._panOffset = timeUnderCursor - startTime - (clampedX * newVisibleDuration);
+
+      // 2. Anchor Y-Axis
+      const chartCenterY = padding.top + chartHeight / 2;
+      const baseY = padding.top + chartHeight - (valueNormUnderCursor * chartHeight);
+      
+      this._yPanOffset = mouseY - (chartCenterY + (baseY - chartCenterY) * this._yZoomLevel);
+
+      // Reset pan offsets when returning to 100% zoom
+      if (this._zoomLevel === 1) this._panOffset = 0;
+      if (this._yZoomLevel === 1) this._yPanOffset = 0;
+
+      this._clampPanOffset();
+      this._clampYPanOffset();
+      this.requestUpdate();
     }
   }
 
   _handleTouchEnd(e) {
     if (e.touches.length === 0) {
       this._isDragging = false;
+      this._isPinching = false;
+    } else if (e.touches.length === 1 && this._isPinching) {
+      // Transition from pinch to drag (lifted one finger)
+      this._isPinching = false;
+      this._isDragging = true;
+      this._dragStartX = e.touches[0].clientX;
+      this._dragStartY = e.touches[0].clientY;
+      this._dragStartOffset = this._panOffset;
+      this._dragStartYOffset = this._yPanOffset;
     }
   }
 
@@ -1085,28 +1172,28 @@ class AutoTPILearningCard extends LitElement {
         height="${height}" 
         viewBox="0 0 ${width} ${height}"
         preserveAspectRatio="xMidYMid meet"
-        style="cursor: ${this._isDragging ? 'grabbing' : 'default'}; overflow: hidden;"
-        @wheel="${this._handleWheel}"
-        @mousedown="${this._handleMouseDown}"
+        style="cursor: ${this._isDragging ? 'grabbing' : 'default'}; overflow: hidden; touch-action: none;"
+        @wheel="${(e) => this._handleWheel(e)}"
+        @mousedown="${(e) => this._handleMouseDown(e)}"
         @mousemove="${(e) => {
         this._handleMouseMove_Drag(e);
         if (!this._isDragging) {
           this._handleMouseMove(e, xMin, xMax, chartWidth, chartHeight, padding, kint, kext, temp, getY_Kint, getY_Kext, getY_Temp);
         }
       }}"
-        @mouseup="${this._handleMouseUp}"
+        @mouseup="${(e) => this._handleMouseUp(e)}"
         @mouseleave="${(e) => {
         this._handleMouseUp(e);
         this._handleMouseLeave();
       }}"
-        @touchstart="${this._handleTouchStart}"
+        @touchstart="${(e) => this._handleTouchStart(e)}"
         @touchmove="${(e) => {
         this._handleTouchMove_Drag(e);
-        if (!this._isDragging) {
+        if (!this._isDragging && !this._isPinching) {
           this._handleTouchMove(e, xMin, xMax, chartWidth, chartHeight, padding, kint, kext, temp, getY_Kint, getY_Kext, getY_Temp);
         }
       }}"
-        @touchend="${this._handleTouchEnd}"
+        @touchend="${(e) => this._handleTouchEnd(e)}"
       >
         <defs>
           <clipPath id="chart-clip">
@@ -1190,13 +1277,13 @@ class AutoTPILearningCard extends LitElement {
 
           <div class="chart-container">
             <div class="zoom-controls">
-              <ha-icon-button @click="${this._zoomIn}">
+              <ha-icon-button @click="${() => this._zoomIn()}">
                 <ha-icon icon="mdi:magnify-plus-outline"></ha-icon>
               </ha-icon-button>
-              <ha-icon-button @click="${this._resetZoom}">
+              <ha-icon-button @click="${() => this._resetZoom()}">
                 <ha-icon icon="mdi:magnify-remove-outline"></ha-icon>
               </ha-icon-button>
-              <ha-icon-button @click="${this._zoomOut}">
+              <ha-icon-button @click="${() => this._zoomOut()}">
                 <ha-icon icon="mdi:magnify-minus-outline"></ha-icon>
               </ha-icon-button>
             </div>
@@ -1205,22 +1292,22 @@ class AutoTPILearningCard extends LitElement {
           </div>
           
           <div class="legend">
-            <div class="legend-item clickable" @click="${this._toggleKint}">
+            <div class="legend-item clickable" @click="${() => this._toggleKint()}">
               <span class="dot kint-bg" style="opacity: ${this._showKint ? 1 : 0.3}"></span> Kint
             </div>
-            <div class="legend-item clickable" @click="${this._toggleKext}">
+            <div class="legend-item clickable" @click="${() => this._toggleKext()}">
               <span class="dot kext-bg" style="opacity: ${this._showKext ? 1 : 0.3}"></span> Kext
             </div>
-            <div class="legend-item clickable" @click="${this._toggleSetpoint}">
+            <div class="legend-item clickable" @click="${() => this._toggleSetpoint()}">
               <span class="dot setpoint-bg" style="opacity: ${this._showSetpoint ? 1 : 0.3}"></span> SetPoint
             </div>
-            <div class="legend-item clickable" @click="${this._toggleExtTemp}">
+            <div class="legend-item clickable" @click="${() => this._toggleExtTemp()}">
               <span class="dot ext-temp-bg" style="opacity: ${this._showExtTemp ? 1 : 0.3}"></span> ExtTemp
             </div>
-            <div class="legend-item clickable" @click="${this._toggleTemp}">
+            <div class="legend-item clickable" @click="${() => this._toggleTemp()}">
               <span class="dot temp-bg" style="opacity: ${this._showTemp ? 1 : 0.3}"></span> Temp
             </div>
-            <div class="legend-item clickable" @click="${this._toggleHeating}">
+            <div class="legend-item clickable" @click="${() => this._toggleHeating()}">
               <span class="dot heating-bg" style="opacity: ${this._showHeating ? 1 : 0.3}"></span> Heating
             </div>
           </div>
