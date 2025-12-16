@@ -111,15 +111,40 @@ class AutoTPILearningCard extends LitElement {
 
   getLayoutOptions() {
     return {
-    //   grid_columns: 12,
-    //   grid_min_columns: 6,
-    //   grid_rows: 1,
-    //   grid_min_rows: 1
-     };
+      //   grid_columns: 12,
+      //   grid_min_columns: 6,
+      //   grid_rows: 1,
+      //   grid_min_rows: 1
+    };
   }
 
   shouldUpdate(changedProps) {
     return true;
+  }
+
+  willUpdate(changedProps) {
+    // Invalidate Chart State if dimensions or zoom/pan change
+    if (changedProps.has('_width') ||
+      changedProps.has('_zoomLevel') ||
+      changedProps.has('_panOffset') ||
+      changedProps.has('_yZoomLevel') ||
+      changedProps.has('_yPanOffset') ||
+      changedProps.has('_history')) {
+      this._chartState = null;
+      this._staticChartContent = null;
+    }
+
+    // Invalidate Static Content if visibility flags change
+    // (Chart State doesn't need to change because it contains all data, 
+    // but Static Content generation depends on these flags)
+    if (changedProps.has('_showTemp') ||
+      changedProps.has('_showHeating') ||
+      changedProps.has('_showSetpoint') ||
+      changedProps.has('_showKint') ||
+      changedProps.has('_showKext') ||
+      changedProps.has('_showExtTemp')) {
+      this._staticChartContent = null;
+    }
   }
 
   updated(changedProperties) {
@@ -236,7 +261,7 @@ class AutoTPILearningCard extends LitElement {
    */
   _getVisibleData(series, xMin, xMax) {
     if (!series || series.length === 0) return [];
-    
+
     // Find index of first point >= xMin
     let startIndex = this._bisectLeft(series, xMin);
     // Find index of last point <= xMax
@@ -291,7 +316,7 @@ class AutoTPILearningCard extends LitElement {
         } else {
           if (attrs.current_temperature != null) safePush(series.temp, t, attrs.current_temperature);
           if (attrs.temperature != null) safePush(series.setpoint, t, attrs.temperature);
-          
+
           let extTempVal = null;
           if (attrs.specific_states?.ext_current_temperature != null) {
             extTempVal = attrs.specific_states.ext_current_temperature;
@@ -379,26 +404,26 @@ class AutoTPILearningCard extends LitElement {
     const startTime = this._history.startTime;
     const totalDuration = Math.max(now - startTime, 6 * 60 * 60 * 1000);
     const currentVisibleDuration = totalDuration / this._zoomLevel;
-    
+
     // Calculate the time currently under the cursor
     const timeUnderCursor = startTime + this._panOffset + (clampedX * currentVisibleDuration);
 
     // --- Y-AXIS ZOOM CALCULATION ---
     // Calculate the normalized value (0-1) currently under the cursor
     const valueNormUnderCursor = this._getYValueFromPosition(mouseY, padding.top, chartHeight);
-    
+
     // --- APPLY NEW ZOOM ---
     const delta = e.deltaY;
     const zoomFactor = delta > 0 ? 0.9 : 1.1; // Zoom out / Zoom in
     const newZoomLevel = Math.max(1, Math.min(20, this._zoomLevel * zoomFactor));
     const newYZoomLevel = Math.max(1, Math.min(20, this._yZoomLevel * zoomFactor));
-    
+
     // --- UPDATE STATE ---
     this._zoomLevel = newZoomLevel;
     this._yZoomLevel = newYZoomLevel;
 
     // --- RE-CALCULATE OFFSETS TO ANCHOR CURSOR ---
-    
+
     // 1. Anchor X-Axis
     const newVisibleDuration = totalDuration / newZoomLevel;
     // We want: timeUnderCursor = startTime + newPanOffset + (clampedX * newVisibleDuration)
@@ -408,10 +433,10 @@ class AutoTPILearningCard extends LitElement {
     // We want the screen position of valueNormUnderCursor to remain at mouseY
     // Formula: ScreenY = CenterY + (BaseY - CenterY) * Zoom + PanOffset
     // Where BaseY = Top + Height - (ValueNorm * Height)
-    
+
     const centerY = padding.top + chartHeight / 2;
     const baseY = padding.top + chartHeight - (valueNormUnderCursor * chartHeight);
-    
+
     // Solve for PanOffset: PanOffset = ScreenY - (CenterY + (BaseY - CenterY) * Zoom)
     this._yPanOffset = mouseY - (centerY + (baseY - centerY) * this._yZoomLevel);
 
@@ -420,11 +445,11 @@ class AutoTPILearningCard extends LitElement {
     if (this._yZoomLevel === 1) this._yPanOffset = 0;
 
     this._clampPanOffset();
-    
+
     // Clear tooltip to avoid "ghosting" or update it immediately
     // For now, clearing it is safer and simpler. The user will move mouse slightly and it will reappear correctly.
     this._tooltip = null;
-    
+
     this.requestUpdate();
   }
 
@@ -441,10 +466,10 @@ class AutoTPILearningCard extends LitElement {
     this._yZoomLevel = Math.max(1, this._yZoomLevel / 1.2);
     // Reset pan offsets when returning to 100% zoom
     if (this._zoomLevel === 1) {
-        this._panOffset = 0;
+      this._panOffset = 0;
     }
     if (this._yZoomLevel === 1) {
-        this._yPanOffset = 0;
+      this._yPanOffset = 0;
     }
     this._clampPanOffset();
     this._clampYPanOffset();
@@ -500,10 +525,10 @@ class AutoTPILearningCard extends LitElement {
     // Inverse of _applyYZoom
     // Forward: ScreenY = CenterY + (BaseY - CenterY) * Zoom + PanOffset
     // Inverse: BaseY = CenterY + (ScreenY - PanOffset - CenterY) / Zoom
-    
+
     const centerY = chartTop + chartHeight / 2;
     const baseY = centerY + (yPos - this._yPanOffset - centerY) / this._yZoomLevel;
-    
+
     // Convert pixel position (BaseY) to normalized value (0-1)
     // BaseY = Top + Height - (Value * Height)
     // Value = (Top + Height - BaseY) / Height
@@ -572,7 +597,7 @@ class AutoTPILearningCard extends LitElement {
       // If I drag UP, I expect the chart to move UP with my mouse.
       // Moving chart UP means increasing the Y-offset (since Y-offset is added to screen position).
       // So if deltaY > 0 (drag up), we want positive change in PanOffset.
-      
+
       // However, let's verify direction.
       // If I click and drag UP, the content should follow the mouse.
       // So the pixel under my mouse should effectively stay under my mouse.
@@ -580,9 +605,9 @@ class AutoTPILearningCard extends LitElement {
       // NewOffset = OldOffset + (CurrentMouse - StartMouse)
       // CurrentMouse - StartMouse = -deltaY.
       // So NewOffset = OldOffset - deltaY.
-      
+
       this._yPanOffset = this._dragStartYOffset - deltaY;
-      
+
       // No strict clamping for Y panning yet as it's infinite canvas essentially,
       // but we can limit it if needed. For now, free panning is fine or minimal clamping.
     }
@@ -623,7 +648,7 @@ class AutoTPILearningCard extends LitElement {
 
     if (this._isDragging && e.touches.length === 1) {
       e.preventDefault();
-      
+
       const deltaX = this._dragStartX - e.touches[0].clientX;
       const deltaY = this._dragStartY - e.touches[0].clientY;
 
@@ -663,12 +688,12 @@ class AutoTPILearningCard extends LitElement {
 
       // --- X-AXIS Zoom ---
       const clampedX = Math.max(0, Math.min(1, (mouseX - padding.left) / chartWidth));
-      
+
       const now = Date.now();
       const startTime = this._history.startTime;
       const totalDuration = Math.max(now - startTime, 6 * 60 * 60 * 1000);
       const currentVisibleDuration = totalDuration / this._zoomLevel;
-      
+
       // Time under pinch center before zoom
       const timeUnderCursor = startTime + this._panOffset + (clampedX * currentVisibleDuration);
 
@@ -684,7 +709,7 @@ class AutoTPILearningCard extends LitElement {
       this._yZoomLevel = newYZoomLevel;
 
       // --- RE-CALCULATE OFFSETS ---
-      
+
       // 1. Anchor X-Axis
       const newVisibleDuration = totalDuration / newZoomLevel;
       this._panOffset = timeUnderCursor - startTime - (clampedX * newVisibleDuration);
@@ -692,7 +717,7 @@ class AutoTPILearningCard extends LitElement {
       // 2. Anchor Y-Axis
       const chartCenterY = padding.top + chartHeight / 2;
       const baseY = padding.top + chartHeight - (valueNormUnderCursor * chartHeight);
-      
+
       this._yPanOffset = mouseY - (chartCenterY + (baseY - chartCenterY) * this._yZoomLevel);
 
       // Reset pan offsets when returning to 100% zoom
@@ -750,9 +775,9 @@ class AutoTPILearningCard extends LitElement {
 
     const findLinearValue = (series, time) => {
       if (!series || series.length === 0) return null;
-      
+
       const index = this._bisectRight(series, time);
-      
+
       // Before first point
       if (index < 0) return series[0].val;
       // After last point
@@ -1148,8 +1173,8 @@ class AutoTPILearningCard extends LitElement {
         const label = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
         let subLabel = '';
         if (h === 0) {
-            const dayOptions = { day: 'numeric', month: 'short' };
-            subLabel = d.toLocaleDateString('fr-FR', dayOptions);
+          const dayOptions = { day: 'numeric', month: 'short' };
+          subLabel = d.toLocaleDateString('fr-FR', dayOptions);
         }
         timeLabels.push(svg`
           <line x1="${xPos}" y1="${padding.top + chartHeight}" x2="${xPos}" y2="${padding.top + chartHeight + 5}" stroke="#aaa" stroke-width="1" />
@@ -1194,10 +1219,10 @@ class AutoTPILearningCard extends LitElement {
     if (!this._chartState) {
       this._chartState = this._calculateChartState();
     }
-    
+
     // 2. Generate / Update Static Content if needed
     if (!this._staticChartContent && this._chartState) {
-        this._staticChartContent = this._generateStaticContent(this._chartState);
+      this._staticChartContent = this._generateStaticContent(this._chartState);
     }
 
     const { height, width } = this._chartState;
@@ -1226,23 +1251,23 @@ class AutoTPILearningCard extends LitElement {
         @wheel="${(e) => this._handleWheel(e)}"
         @mousedown="${(e) => this._handleMouseDown(e)}"
         @mousemove="${(e) => {
-          this._handleMouseMove_Drag(e);
-          if (!this._isDragging) {
-             this._handleMouseMove(e);
-          }
-        }}"
+        this._handleMouseMove_Drag(e);
+        if (!this._isDragging) {
+          this._handleMouseMove(e);
+        }
+      }}"
         @mouseup="${(e) => this._handleMouseUp(e)}"
         @mouseleave="${(e) => {
-          this._handleMouseUp(e);
-          this._handleMouseLeave();
-        }}"
+        this._handleMouseUp(e);
+        this._handleMouseLeave();
+      }}"
         @touchstart="${(e) => this._handleTouchStart(e)}"
         @touchmove="${(e) => {
-          this._handleTouchMove_Drag(e);
-          if (!this._isDragging && !this._isPinching) {
-            this._handleTouchMove(e);
-          }
-        }}"
+        this._handleTouchMove_Drag(e);
+        if (!this._isDragging && !this._isPinching) {
+          this._handleTouchMove(e);
+        }
+      }}"
         @touchend="${(e) => this._handleTouchEnd(e)}"
       >
         ${this._staticChartContent}
