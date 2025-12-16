@@ -517,18 +517,18 @@ class AutoTPILearningCard extends LitElement {
     return pt.matrixTransform(svg.getScreenCTM().inverse());
   }
 
-  _handleTouchMove(e, xMin, xMax, chartWidth, chartHeight, padding, kint, kext, temp, extTemp, setpoint, getY_Kint, getY_Kext, getY_Temp) {
+  _handleTouchMove(e) {
     e.preventDefault();
     const svg = e.currentTarget;
     const touch = e.touches[0];
     const { x, y } = this._getSVGPoint(svg, touch.clientX, touch.clientY);
-    this._processCursorMove(x, y, xMin, xMax, chartWidth, chartHeight, padding, kint, kext, temp, extTemp, setpoint, getY_Kint, getY_Kext, getY_Temp);
+    this._processCursorMove(x, y);
   }
 
-  _handleMouseMove(e, xMin, xMax, chartWidth, chartHeight, padding, kint, kext, temp, extTemp, setpoint, getY_Kint, getY_Kext, getY_Temp) {
+  _handleMouseMove(e) {
     const svg = e.currentTarget;
     const { x, y } = this._getSVGPoint(svg, e.clientX, e.clientY);
-    this._processCursorMove(x, y, xMin, xMax, chartWidth, chartHeight, padding, kint, kext, temp, extTemp, setpoint, getY_Kint, getY_Kext, getY_Temp);
+    this._processCursorMove(x, y);
   }
   _handleMouseDown(e) {
     this._isDragging = true;
@@ -720,7 +720,15 @@ class AutoTPILearningCard extends LitElement {
     }
   }
 
-  _processCursorMove(mouseX, mouseY, xMin, xMax, chartWidth, chartHeight, padding, kint, kext, temp, extTemp, setpoint, getY_Kint, getY_Kext, getY_Temp) {
+  _processCursorMove(mouseX, mouseY) {
+    if (!this._chartState) return;
+
+    const {
+      xMin, xMax, chartWidth, chartHeight, padding,
+      kint, kext, temp, extTemp, setpoint,
+      getY_Kint, getY_Kext, getY_Temp
+    } = this._chartState;
+
     const x = mouseX - padding.left;
 
     if (x < 0 || x > chartWidth) {
@@ -882,16 +890,8 @@ class AutoTPILearningCard extends LitElement {
     `;
   }
 
-  _renderChart() {
-    if (this._loading) {
-      return html`<div class="loading">Loading history data...</div>`;
-    }
-    if (this._error) {
-      return html`<div class="error">${this._error}</div>`;
-    }
-    if (!this._history || (this._history.kint.length === 0 && this._history.kext.length === 0)) {
-      return html`<div class="no-data">No history data available</div>`;
-    }
+  _calculateChartState() {
+    if (!this._history) return null;
 
     const { kint, kext, temp, heating, setpoint, extTemp } = this._history;
 
@@ -923,16 +923,15 @@ class AutoTPILearningCard extends LitElement {
       return padding.left + ((t - xMin) / (xMax - xMin)) * chartWidth;
     };
 
-    // Dynamic scaling for Kint
-    let kintMin = 0;
-    let kintMax = 1;
+    // --- Dynamic Scaling Logic (Same as before) ---
+
+    // Kint
+    let kintMin = 0, kintMax = 1;
     if (kint.length > 0) {
-      let minVal = Infinity;
-      let maxVal = -Infinity;
-      for (let i = 0; i < kint.length; i++) {
-        const v = kint[i].val;
-        if (v < minVal) minVal = v;
-        if (v > maxVal) maxVal = v;
+      let minVal = Infinity, maxVal = -Infinity;
+      for (const p of kint) {
+        if (p.val < minVal) minVal = p.val;
+        if (p.val > maxVal) maxVal = p.val;
       }
       kintMin = Math.min(0, minVal);
       kintMax = Math.max(1, maxVal);
@@ -944,16 +943,13 @@ class AutoTPILearningCard extends LitElement {
       return this._applyYZoom(baseY, padding.top, chartHeight);
     };
 
-    // Dynamic scaling for Kext
-    let kextMin = 0;
-    let kextMax = 0.1;
+    // Kext
+    let kextMin = 0, kextMax = 0.1;
     if (kext.length > 0) {
-      let minVal = Infinity;
-      let maxVal = -Infinity;
-      for (let i = 0; i < kext.length; i++) {
-        const v = kext[i].val;
-        if (v < minVal) minVal = v;
-        if (v > maxVal) maxVal = v;
+      let minVal = Infinity, maxVal = -Infinity;
+      for (const p of kext) {
+        if (p.val < minVal) minVal = p.val;
+        if (p.val > maxVal) maxVal = p.val;
       }
       kextMin = Math.min(0, minVal);
       kextMax = Math.max(0.1, maxVal);
@@ -965,22 +961,14 @@ class AutoTPILearningCard extends LitElement {
       return this._applyYZoom(baseY, padding.top, chartHeight);
     };
 
-    // Dynamic temperature scale based on all temperature curves (temp, extTemp, setpoint)
-    // with bounds between -20° and 40°
-    let tempMin = -20;
-    let tempMax = 40;
-
-    // Calculate min/max from all temperature data regardless of visibility
+    // Temp
+    let tempMin = -20, tempMax = 40;
     const allTempData = [...temp, ...extTemp, ...setpoint];
     if (allTempData.length > 0) {
       const dataMin = Math.min(...allTempData.map(p => p.val));
       const dataMax = Math.max(...allTempData.map(p => p.val));
-
-      // Apply bounds but keep dynamic range
       tempMin = Math.max(-20, Math.floor(dataMin - 1));
       tempMax = Math.min(40, Math.ceil(dataMax + 1));
-
-      // Ensure minimum range of 5 degrees
       if (tempMax - tempMin < 5) {
         const center = (tempMin + tempMax) / 2;
         tempMin = Math.max(-20, center - 2.5);
@@ -994,6 +982,29 @@ class AutoTPILearningCard extends LitElement {
       return this._applyYZoom(baseY, padding.top, chartHeight);
     };
 
+    return {
+      width, height, padding, chartWidth, chartHeight,
+      xMin, xMax,
+      getX, getY_Kint, getY_Kext, getY_Temp,
+      kintMin, kintMax,
+      kextMin, kextMax,
+      kint, kext, temp, heating, setpoint, extTemp
+    };
+  }
+
+  _generateStaticContent(state) {
+    if (!state) return svg``;
+
+    const {
+      width, height, padding, chartWidth, chartHeight,
+      xMin, xMax,
+      getX, getY_Kint, getY_Kext, getY_Temp,
+      kintMin, kintMax,
+      kextMin, kextMax,
+      kint, kext, temp, heating, setpoint, extTemp
+    } = state;
+
+    // Helper functions (defined here to capture scope)
     const createLinePath = (data, scaleY) => {
       if (data.length === 0) return '';
       return data.map((d, i) =>
@@ -1004,48 +1015,40 @@ class AutoTPILearningCard extends LitElement {
     const createSteppedLinePath = (data, scaleY) => {
       if (data.length === 0) return '';
       let path = `M ${getX(data[0].t).toFixed(1)},${scaleY(data[0].val).toFixed(1)}`;
-
       for (let i = 0; i < data.length - 1; i++) {
         const p1 = data[i];
         const p2 = data[i + 1];
         path += ` L ${getX(p2.t).toFixed(1)},${scaleY(p1.val).toFixed(1)}`;
         path += ` L ${getX(p2.t).toFixed(1)},${scaleY(p2.val).toFixed(1)}`;
       }
-
       const lastP = data[data.length - 1];
       const currentNow = Date.now();
       if (currentNow > lastP.t) {
         path += ` L ${getX(currentNow).toFixed(1)},${scaleY(lastP.val).toFixed(1)}`;
       }
-
       return path;
     };
 
     const createFilledSteppedAreaPath = (data, scaleY) => {
       if (data.length === 0) return '';
       let path = `M ${getX(data[0].t).toFixed(1)},${padding.top + chartHeight}`;
-
       for (let i = 0; i < data.length - 1; i++) {
         const p1 = data[i];
         const p2 = data[i + 1];
         path += ` L ${getX(p2.t).toFixed(1)},${scaleY(p1.val).toFixed(1)}`;
         path += ` L ${getX(p2.t).toFixed(1)},${scaleY(p2.val).toFixed(1)}`;
       }
-
       const lastP = data[data.length - 1];
       const currentNow = Date.now();
       if (currentNow > lastP.t) {
         path += ` L ${getX(currentNow).toFixed(1)},${scaleY(lastP.val).toFixed(1)}`;
       }
-
       path += ` L ${getX(data[data.length - 1].t).toFixed(1)},${padding.top + chartHeight}`;
       path += ` L ${getX(data[0].t).toFixed(1)},${padding.top + chartHeight} Z`;
-
       return path;
     };
 
-    // --- OPTIMIZATION: Windowing / Culling ---
-    // Only process data points that are visible in the current time window
+    // Calculate Paths (Windowed)
     const visibleKint = this._showKint ? this._getVisibleData(kint, xMin, xMax) : [];
     const visibleKext = this._showKext ? this._getVisibleData(kext, xMin, xMax) : [];
     const visibleTemp = this._showTemp ? this._getVisibleData(temp, xMin, xMax) : [];
@@ -1059,42 +1062,25 @@ class AutoTPILearningCard extends LitElement {
     const setpointPath = visibleSetpoint.length > 0 ? createSteppedLinePath(visibleSetpoint, getY_Temp) : '';
     const setpointFilledPath = visibleSetpoint.length > 0 ? createFilledSteppedAreaPath(visibleSetpoint, getY_Temp) : '';
 
+    // Heating Rects
     const heatingRects = [];
     if (this._showHeating && heating.length > 0) {
-      const chartLeft = padding.left;
       const chartRight = width - padding.right;
-      const chartBottom = padding.top + chartHeight;
-
-      // Use _getVisibleData logic but manually to handle the durations correctly
       let startIndex = this._bisectLeft(heating, xMin);
       let endIndex = this._bisectRight(heating, xMax);
-      
-      // Ensure we include the interval starting before the window
       startIndex = Math.max(0, startIndex - 1);
-      // Ensure we check up to the end or slightly past
       endIndex = Math.min(heating.length - 1, endIndex + 1);
 
       for (let i = startIndex; i <= endIndex; i++) {
         if (!heating[i]) continue;
-        
         if (heating[i].val === 1) {
           const t1 = heating[i].t;
-          let t2;
-          
-          if (i < heating.length - 1) {
-            t2 = heating[i + 1].t;
-          } else {
-            t2 = Date.now();
-          }
-
-          // If the interval is completely outside the view, skip
+          const t2 = (i < heating.length - 1) ? heating[i + 1].t : Date.now();
           if (t2 < xMin || t1 > xMax) continue;
 
           const x1 = getX(t1);
           const x2 = getX(t2);
-
-          const rectX = Math.max(chartLeft, Math.min(x1, x2));
-          // Calculate effective end position constrained to chart area
+          const rectX = Math.max(padding.left, Math.min(x1, x2));
           const effectiveX2 = Math.min(chartRight, Math.max(x1, x2));
           const rectWidth = effectiveX2 - rectX;
 
@@ -1102,7 +1088,7 @@ class AutoTPILearningCard extends LitElement {
             heatingRects.push(svg`
               <rect
                 x="${rectX}"
-                y="${chartBottom - 20}"
+                y="${padding.top + chartHeight - 20}"
                 width="${rectWidth}"
                 height="20"
                 fill="rgba(255, 152, 0, 0.5)"
@@ -1114,77 +1100,42 @@ class AutoTPILearningCard extends LitElement {
       }
     }
 
+    // Grids and Axes
     const kintTicks = [];
     const kintStep = kintMax > 2 ? 0.5 : 0.25;
     const kintStart = Math.ceil(kintMin / kintStep) * kintStep;
-    for (let v = kintStart; v <= kintMax + 0.001; v += kintStep) {
-      kintTicks.push(v);
-    }
+    for (let v = kintStart; v <= kintMax + 0.001; v += kintStep) kintTicks.push(v);
 
     const kintGrid = kintTicks.map(val => {
       const y = getY_Kint(val);
       return svg`
-        <line 
-          x1="${padding.left}" y1="${y}" 
-          x2="${width - padding.right}" y2="${y}" 
-          stroke="var(--divider-color, #444)" 
-          stroke-width="1" 
-          opacity="0.3" 
-        />
-        <text 
-          x="${padding.left - 8}" y="${y + 5}"
-          text-anchor="end" font-size="12" fill="rgb(255, 235, 59)" opacity="0.9"
-        >${val.toFixed(2)}</text>
+        <line x1="${padding.left}" y1="${y}" x2="${width - padding.right}" y2="${y}" stroke="var(--divider-color, #444)" stroke-width="1" opacity="0.3" />
+        <text x="${padding.left - 8}" y="${y + 5}" text-anchor="end" font-size="12" fill="rgb(255, 235, 59)" opacity="0.9">${val.toFixed(2)}</text>
       `;
     });
 
     const kextTicks = [];
     const kextStep = kextMax > 0.5 ? 0.1 : 0.05;
     const kextStart = Math.ceil(kextMin / kextStep) * kextStep;
-    for (let v = kextStart; v <= kextMax + 0.0001; v += kextStep) {
-      kextTicks.push(v);
-    }
+    for (let v = kextStart; v <= kextMax + 0.0001; v += kextStep) kextTicks.push(v);
 
     const kextLabels = kextTicks.map(val => {
       const y = getY_Kext(val);
       return svg`
-        <text 
-          x="${width - padding.right + 8}" y="${y + 5}"
-          text-anchor="start" font-size="12" fill="rgb(76, 175, 80)" opacity="0.9"
-        >${val.toFixed(2)}</text>
+        <text x="${width - padding.right + 8}" y="${y + 5}" text-anchor="start" font-size="12" fill="rgb(76, 175, 80)" opacity="0.9">${val.toFixed(2)}</text>
       `;
     });
 
     const timeLabels = [];
     const durationMs = xMax - xMin;
-
     const targetTicks = 5;
     const rawInterval = durationMs / targetTicks;
-
-    const niceIntervals = [
-      3600000,
-      2 * 3600000,
-      3 * 3600000,
-      4 * 3600000,
-      6 * 3600000,
-      12 * 3600000,
-      24 * 3600000
-    ];
-
-    let tickInterval = niceIntervals[niceIntervals.length - 1];
-    for (const interval of niceIntervals) {
-      if (rawInterval <= interval) {
-        tickInterval = interval;
-        break;
-      }
-    }
+    const niceIntervals = [3600000, 2 * 3600000, 3 * 3600000, 4 * 3600000, 6 * 3600000, 12 * 3600000, 24 * 3600000];
+    let tickInterval = niceIntervals.find(i => rawInterval <= i) || niceIntervals[niceIntervals.length - 1];
 
     const startDate = new Date(xMin);
     startDate.setMinutes(0, 0, 0);
-    if (startDate.getTime() < xMin) {
-      startDate.setTime(startDate.getTime() + 3600000);
-    }
-
+    if (startDate.getTime() < xMin) startDate.setTime(startDate.getTime() + 3600000);
     let currentTickTime = startDate.getTime();
 
     while (currentTickTime <= xMax) {
@@ -1194,43 +1145,72 @@ class AutoTPILearningCard extends LitElement {
 
       if (h % hoursInInterval === 0) {
         const xPos = getX(currentTickTime);
-
         const label = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
-
         let subLabel = '';
         if (h === 0) {
-          const dayOptions = { day: 'numeric', month: 'short' };
-          subLabel = d.toLocaleDateString('fr-FR', dayOptions);
+            const dayOptions = { day: 'numeric', month: 'short' };
+            subLabel = d.toLocaleDateString('fr-FR', dayOptions);
         }
-
         timeLabels.push(svg`
-            <line 
-              x1="${xPos}" y1="${padding.top + chartHeight}" 
-              x2="${xPos}" y2="${padding.top + chartHeight + 5}" 
-              stroke="#aaa" stroke-width="1" 
-            />
-            <text 
-              x="${xPos}" y="${height - 18}"
-              text-anchor="middle" font-size="12" fill="#aaa"
-            >${label}</text>
-            ${subLabel ? svg`<text x="${xPos}" y="${height - 4}" text-anchor="middle" font-size="10" fill="#888">${subLabel}</text>` : ''}
-          `);
+          <line x1="${xPos}" y1="${padding.top + chartHeight}" x2="${xPos}" y2="${padding.top + chartHeight + 5}" stroke="#aaa" stroke-width="1" />
+          <text x="${xPos}" y="${height - 18}" text-anchor="middle" font-size="12" fill="#aaa">${label}</text>
+          ${subLabel ? svg`<text x="${xPos}" y="${height - 4}" text-anchor="middle" font-size="10" fill="#888">${subLabel}</text>` : ''}
+        `);
       }
       currentTickTime += 3600000;
     }
 
+    return svg`
+      <defs>
+        <clipPath id="chart-clip">
+          <rect x="${padding.left}" y="${padding.top}" width="${chartWidth}" height="${chartHeight}" />
+        </clipPath>
+      </defs>
+
+      ${kintGrid}
+      ${kextLabels}
+      ${timeLabels}
+
+      <rect x="${padding.left}" y="${padding.top}" width="${chartWidth}" height="${chartHeight}" fill="transparent" stroke="var(--divider-color, #444)" stroke-width="1" opacity="0.5" />
+
+      ${heatingRects}
+      ${setpointFilledPath ? svg`<path d="${setpointFilledPath}" fill="rgba(255, 152, 0, 0.4)" stroke="none" style="pointer-events: none;" clip-path="url(#chart-clip)" />` : ''}
+      ${setpointPath ? svg`<path d="${setpointPath}" fill="none" stroke="rgba(255, 152, 0, 0.8)" stroke-width="2" style="pointer-events: none;" clip-path="url(#chart-clip)" />` : ''}
+      ${tempPath ? svg`<path d="${tempPath}" fill="none" stroke="rgb(33, 150, 243)" stroke-width="1.5" opacity="0.7" style="pointer-events: none;" clip-path="url(#chart-clip)" />` : ''}
+      ${extTempPath ? svg`<path d="${extTempPath}" fill="none" stroke="rgb(25, 50, 100)" stroke-width="1.5" opacity="0.9" style="pointer-events: none;" clip-path="url(#chart-clip)" />` : ''}
+      ${kextPath ? svg`<path d="${kextPath}" fill="none" stroke="rgb(76, 175, 80)" stroke-width="2" style="pointer-events: none;" clip-path="url(#chart-clip)" />` : ''}
+      ${kintPath ? svg`<path d="${kintPath}" fill="none" stroke="rgb(255, 235, 59)" stroke-width="2.5" style="pointer-events: none;" clip-path="url(#chart-clip)" />` : ''}
+    `;
+  }
+
+  _renderChart() {
+    if (this._loading) return html`<div class="loading">Loading history data...</div>`;
+    if (this._error) return html`<div class="error">${this._error}</div>`;
+    if (!this._history || (this._history.kint.length === 0 && this._history.kext.length === 0)) {
+      return html`<div class="no-data">No history data available</div>`;
+    }
+
+    // 1. Calculate / Update State if needed
+    if (!this._chartState) {
+      this._chartState = this._calculateChartState();
+    }
+    
+    // 2. Generate / Update Static Content if needed
+    if (!this._staticChartContent && this._chartState) {
+        this._staticChartContent = this._generateStaticContent(this._chartState);
+    }
+
+    const { height, width } = this._chartState;
+    const padding = this._chartState.padding;
+
+    // 3. Render Dynamic Content (Tooltip)
     let tooltipIndicators = svg``;
     if (this._tooltip && this._tooltip.value !== null) {
       const tx = this._tooltip.x;
       const ty = this._tooltip.targetY;
-
       tooltipIndicators = svg`
         <g style="pointer-events: none;">
-          <line
-            x1="${tx}" y1="${padding.top}"
-            x2="${tx}" y2="${height - padding.bottom}"
-            stroke="var(--secondary-text-color)" stroke-width="1" stroke-dasharray="4" opacity="0.3"
-          />
+          <line x1="${tx}" y1="${padding.top}" x2="${tx}" y2="${height - padding.bottom}" stroke="var(--secondary-text-color)" stroke-width="1" stroke-dasharray="4" opacity="0.3" />
           <circle cx="${tx}" cy="${ty}" r="6" fill="white" stroke="${this._tooltip.color}" stroke-width="3" />
         </g>
       `;
@@ -1238,59 +1218,36 @@ class AutoTPILearningCard extends LitElement {
 
     return html`
       <svg
-        width="100%" 
-        height="${height}" 
+        width="100%"
+        height="${height}"
         viewBox="0 0 ${width} ${height}"
         preserveAspectRatio="xMidYMid meet"
         style="cursor: ${this._isDragging ? 'grabbing' : 'default'}; overflow: hidden; touch-action: none;"
         @wheel="${(e) => this._handleWheel(e)}"
         @mousedown="${(e) => this._handleMouseDown(e)}"
         @mousemove="${(e) => {
-        this._handleMouseMove_Drag(e);
-        if (!this._isDragging) {
-          this._handleMouseMove(e, xMin, xMax, chartWidth, chartHeight, padding, kint, kext, temp, extTemp, setpoint, getY_Kint, getY_Kext, getY_Temp);
-        }
-      }}"
+          this._handleMouseMove_Drag(e);
+          if (!this._isDragging) {
+             this._handleMouseMove(e);
+          }
+        }}"
         @mouseup="${(e) => this._handleMouseUp(e)}"
         @mouseleave="${(e) => {
-        this._handleMouseUp(e);
-        this._handleMouseLeave();
-      }}"
+          this._handleMouseUp(e);
+          this._handleMouseLeave();
+        }}"
         @touchstart="${(e) => this._handleTouchStart(e)}"
         @touchmove="${(e) => {
-        this._handleTouchMove_Drag(e);
-        if (!this._isDragging && !this._isPinching) {
-          this._handleTouchMove(e, xMin, xMax, chartWidth, chartHeight, padding, kint, kext, temp, extTemp, setpoint, getY_Kint, getY_Kext, getY_Temp);
-        }
-      }}"
+          this._handleTouchMove_Drag(e);
+          if (!this._isDragging && !this._isPinching) {
+            this._handleTouchMove(e);
+          }
+        }}"
         @touchend="${(e) => this._handleTouchEnd(e)}"
       >
-        <defs>
-          <clipPath id="chart-clip">
-            <rect x="${padding.left}" y="${padding.top}" width="${chartWidth}" height="${chartHeight}" />
-          </clipPath>
-        </defs>
-
-        ${kintGrid}
-        ${kextLabels}
-        ${timeLabels}
-
-        <rect
-          x="${padding.left}" y="${padding.top}"
-          width="${chartWidth}" height="${chartHeight}"
-          fill="transparent" stroke="var(--divider-color, #444)" stroke-width="1" opacity="0.5"
-        />
-
-        ${heatingRects}
-        ${setpointFilledPath ? svg`<path d="${setpointFilledPath}" fill="rgba(255, 152, 0, 0.4)" stroke="none" style="pointer-events: none;" clip-path="url(#chart-clip)" />` : ''}
-        ${setpointPath ? svg`<path d="${setpointPath}" fill="none" stroke="rgba(255, 152, 0, 0.8)" stroke-width="2" style="pointer-events: none;" clip-path="url(#chart-clip)" />` : ''}
-        ${tempPath ? svg`<path d="${tempPath}" fill="none" stroke="rgb(33, 150, 243)" stroke-width="1.5" opacity="0.7" style="pointer-events: none;" clip-path="url(#chart-clip)" />` : ''}
-        ${extTempPath ? svg`<path d="${extTempPath}" fill="none" stroke="rgb(25, 50, 100)" stroke-width="1.5" opacity="0.9" style="pointer-events: none;" clip-path="url(#chart-clip)" />` : ''}
-        ${kextPath ? svg`<path d="${kextPath}" fill="none" stroke="rgb(76, 175, 80)" stroke-width="2" style="pointer-events: none;" clip-path="url(#chart-clip)" />` : ''}
-        ${kintPath ? svg`<path d="${kintPath}" fill="none" stroke="rgb(255, 235, 59)" stroke-width="2.5" style="pointer-events: none;" clip-path="url(#chart-clip)" />` : ''}
-
+        ${this._staticChartContent}
         ${tooltipIndicators}
-    </svg>
+      </svg>
     `;
   }
 
