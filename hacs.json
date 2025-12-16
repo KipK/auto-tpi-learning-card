@@ -1,0 +1,7 @@
+{
+    "name": "Auto TPI Learning",
+    "homeassistant": "2025.0.0",
+    "zip_release": false,
+    "filename": "dist/auto-tpi-learning-card.js",
+    "render_readme": true
+}
