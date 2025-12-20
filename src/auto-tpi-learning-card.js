@@ -1587,7 +1587,9 @@ class AutoTPILearningCard extends LitElement {
   `;
 }
 
-customElements.define('auto-tpi-learning-card', AutoTPILearningCard);
+if (!customElements.get('auto-tpi-learning-card')) {
+  customElements.define('auto-tpi-learning-card', AutoTPILearningCard);
+}
 
 class AutoTPILearningCardEditor extends LitElement {
   static properties = {
@@ -1732,11 +1734,15 @@ class AutoTPILearningCardEditor extends LitElement {
   `;
 }
 
-customElements.define('auto-tpi-learning-card-editor', AutoTPILearningCardEditor);
+if (!customElements.get('auto-tpi-learning-card-editor')) {
+  customElements.define('auto-tpi-learning-card-editor', AutoTPILearningCardEditor);
+}
 
 window.customCards = window.customCards || [];
-window.customCards.push({
-  type: 'auto-tpi-learning-card',
-  name: 'Auto-TPI Learning Card',
-  description: 'Visualization of Versatile Thermostat Auto-TPI learning process'
-});
+if (!window.customCards.some(card => card.type === 'auto-tpi-learning-card')) {
+  window.customCards.push({
+    type: 'auto-tpi-learning-card',
+    name: 'Auto-TPI Learning Card',
+    description: 'Visualization of Versatile Thermostat Auto-TPI learning process'
+  });
+}
