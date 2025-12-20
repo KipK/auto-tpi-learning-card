@@ -30,7 +30,8 @@ class AutoTPILearningCard extends LitElement {
     _isPinching: { type: Boolean },
     _pinchStartDist: { type: Number },
     _pinchStartZoom: { type: Number },
-    _pinchStartYZoom: { type: Number }
+    _pinchStartYZoom: { type: Number },
+    _resetChecked: { type: Boolean }
   };
 
   static getConfigElement() {
@@ -71,6 +72,7 @@ class AutoTPILearningCard extends LitElement {
     this._isYDragging = false;
     this._dragStartY = 0;
     this._dragStartYOffset = 0;
+    this._resetChecked = false;
   }
 
   connectedCallback() {
@@ -355,12 +357,39 @@ class AutoTPILearningCard extends LitElement {
       kextCycles: entity.attributes.coeff_ext_cycles || 0,
       confidence: parseFloat(entity.attributes.model_confidence) || 0,
       status: entity.attributes.last_learning_status || '',
-      learningStartDt: entity.attributes.learning_start_dt || ''
+      learningStartDt: entity.attributes.learning_start_dt || '',
+      learningDone: entity.attributes.learning_done
     };
   }
 
-  _toggleTemp() {
-    this._showTemp = !this._showTemp;
+  _toggleAutoTpi(isStateOn) {
+    if (!this.hass || !this.config) return;
+
+    if (isStateOn) {
+        // We want to STOP
+        // reinitialise: false
+        this.hass.callService('versatile_thermostat', 'set_auto_tpi_mode', {
+          entity_id: this.config.climate_entity,
+          auto_tpi_mode: false,
+          reinitialise: false
+        });
+    } else {
+        // We want to START
+        // reinitialise depends on checkbox (default unchecked = false = Resume)
+        this.hass.callService('versatile_thermostat', 'set_auto_tpi_mode', {
+            entity_id: this.config.climate_entity,
+            auto_tpi_mode: true,
+            reinitialise: this._resetChecked
+        });
+    }
+
+    // Reset the checkbox after action
+    this._resetChecked = false;
+  }
+
+  _toggleResetCheckbox() {
+    this._resetChecked = !this._resetChecked;
+    this.requestUpdate();
   }
 
   _toggleHeating() {
@@ -381,6 +410,10 @@ class AutoTPILearningCard extends LitElement {
 
   _toggleExtTemp() {
     this._showExtTemp = !this._showExtTemp;
+  }
+
+  _toggleTemp() {
+    this._showTemp = !this._showTemp;
   }
 
   _handleWheel(e) {
@@ -1298,10 +1331,37 @@ class AutoTPILearningCard extends LitElement {
     const autoTpiState = isStateOn ? 'Active' : 'Off';
     const status = learningData.status || 'Waiting for update...';
 
+    const buttonLabel = isStateOn ? 'Stop Learning' : 'Start Learning';
+    const buttonIcon = isStateOn ? 'mdi:stop' : 'mdi:play';
+
     return html`
       <ha-card>
         <div class="card-content">
-          <div class="header">${this.config.name || 'Auto-TPI Learning'}</div>
+          <div class="header-row">
+            <div class="header-title">${this.config.name || 'Auto-TPI Learning'}</div>
+            
+            <div class="controls-container">
+               ${!isStateOn ? html`
+                <div class="checkbox-container" @click="${() => this._toggleResetCheckbox()}">
+                  <ha-checkbox
+                    .checked=${this._resetChecked}
+                    style="pointer-events: none;"
+                  ></ha-checkbox>
+                  <span class="checkbox-label">Reset</span>
+                </div>
+              ` : ''}
+
+              <mwc-button
+                @click=${() => this._toggleAutoTpi(isStateOn)}
+                class="${isStateOn ? 'stop-btn' : 'start-btn'}"
+                dense
+                raised
+              >
+                <ha-icon icon="${buttonIcon}" style="margin-right: 4px;"></ha-icon>
+                ${buttonLabel}
+              </mwc-button>
+            </div>
+          </div>
 
           <div class="telemetry">
             <div class="telemetry-content">
@@ -1388,11 +1448,44 @@ class AutoTPILearningCard extends LitElement {
       flex-direction: column;
       flex: 1;
     }
-    .header {
-      font-size: 16px;
-      font-weight: 500;
+    .header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
       margin-bottom: 16px;
     }
+    .header-title {
+      font-size: 16px;
+      font-weight: 500;
+    }
+    .controls-container {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .checkbox-container {
+      display: flex;
+      align-items: center;
+      cursor: pointer;
+      user-select: none;
+    }
+    .checkbox-label {
+      font-size: 14px;
+      margin-left: 4px;
+    }
+
+    /* Button Colors */
+    mwc-button.start-btn {
+      --mdc-theme-primary: var(--success-color, #4CAF50);
+      --mdc-theme-on-primary: white;
+      cursor: pointer;
+    }
+    mwc-button.stop-btn {
+      --mdc-theme-primary: var(--error-color, #F44336);
+      --mdc-theme-on-primary: white;
+      cursor: pointer;
+    }
+
     .telemetry {
       margin-bottom: 4px; /* Reduced from 16px */
       background: rgba(0,0,0,0.1);
