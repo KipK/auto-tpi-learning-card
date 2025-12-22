@@ -166,8 +166,9 @@ class AutoTPILearningCard extends LitElement {
 
       const now = Date.now();
       const isStale = (now - this._lastFetchTime) > 5 * 60 * 1000;
+      const isFinished = this._history && this._history.endTime;
 
-      const shouldFetch = (!this._history || isStale) && !this._loading;
+      const shouldFetch = (!this._history || (isStale && !isFinished)) && !this._loading;
 
       if (shouldFetch) {
         this._fetchHistory();
@@ -293,6 +294,8 @@ class AutoTPILearningCard extends LitElement {
       extTemp: []
     };
 
+    let endTime = null;
+
     const safePush = (arr, t, val) => {
       const floatVal = parseFloat(val);
       if (!isNaN(floatVal)) arr.push({ t, val: floatVal });
@@ -313,6 +316,15 @@ class AutoTPILearningCard extends LitElement {
         if (!attrs) continue;
 
         if (isLearning) {
+          // Detect End of Learning
+          const kintCycles = attrs.coeff_int_cycles || 0;
+          const kextCycles = attrs.coeff_ext_cycles || 0;
+          if (state.state === 'Off' && kintCycles >= 50 && kextCycles >= 50) {
+            if (endTime === null || t < endTime) {
+              endTime = t;
+            }
+          }
+
           if (attrs.calculated_coef_int != null) safePush(series.kint, t, attrs.calculated_coef_int);
           if (attrs.calculated_coef_ext != null) safePush(series.kext, t, attrs.calculated_coef_ext);
         } else {
@@ -341,7 +353,8 @@ class AutoTPILearningCard extends LitElement {
 
     this._history = {
       ...series,
-      startTime: startTime.getTime()
+      startTime: startTime.getTime(),
+      endTime
     };
   }
 
@@ -433,7 +446,7 @@ class AutoTPILearningCard extends LitElement {
     const clampedX = Math.max(0, Math.min(1, (mouseX - padding.left) / chartWidth));
 
     // --- X-AXIS ZOOM CALCULATION ---
-    const now = Date.now();
+    const now = this._history.endTime || Date.now();
     const startTime = this._history.startTime;
     const totalDuration = Math.max(now - startTime, 6 * 60 * 60 * 1000);
     const currentVisibleDuration = totalDuration / this._zoomLevel;
@@ -519,7 +532,7 @@ class AutoTPILearningCard extends LitElement {
 
   _clampPanOffset() {
     if (!this._history) return;
-    const now = Date.now();
+    const now = this._history.endTime || Date.now();
     const startTime = this._history.startTime;
     const totalDuration = now - startTime;
     const minDuration = 6 * 60 * 60 * 1000;
@@ -609,7 +622,7 @@ class AutoTPILearningCard extends LitElement {
     const deltaY = this._dragStartY - e.clientY;
 
     // --- X-Axis Drag ---
-    const now = Date.now();
+    const now = this._history.endTime || Date.now();
     const startTime = this._history.startTime;
     const totalDuration = Math.max(now - startTime, 6 * 60 * 60 * 1000);
     const visibleDuration = totalDuration / this._zoomLevel;
@@ -685,7 +698,7 @@ class AutoTPILearningCard extends LitElement {
       const deltaX = this._dragStartX - e.touches[0].clientX;
       const deltaY = this._dragStartY - e.touches[0].clientY;
 
-      const now = Date.now();
+      const now = this._history.endTime || Date.now();
       const startTime = this._history.startTime;
       const totalDuration = Math.max(now - startTime, 6 * 60 * 60 * 1000);
       const visibleDuration = totalDuration / this._zoomLevel;
@@ -722,7 +735,7 @@ class AutoTPILearningCard extends LitElement {
       // --- X-AXIS Zoom ---
       const clampedX = Math.max(0, Math.min(1, (mouseX - padding.left) / chartWidth));
 
-      const now = Date.now();
+      const now = this._history.endTime || Date.now();
       const startTime = this._history.startTime;
       const totalDuration = Math.max(now - startTime, 6 * 60 * 60 * 1000);
       const currentVisibleDuration = totalDuration / this._zoomLevel;
@@ -960,7 +973,7 @@ class AutoTPILearningCard extends LitElement {
     const chartWidth = width - padding.left - padding.right;
     const chartHeight = height - padding.top - padding.bottom;
 
-    const now = Date.now();
+    const now = this._history.endTime || Date.now();
     let baseXMin = this._history.startTime;
     let baseXMax = now;
 
@@ -1080,7 +1093,7 @@ class AutoTPILearningCard extends LitElement {
         path += ` L ${getX(p2.t).toFixed(1)},${scaleY(p2.val).toFixed(1)}`;
       }
       const lastP = data[data.length - 1];
-      const currentNow = Date.now();
+      const currentNow = this._history?.endTime || Date.now();
       if (currentNow > lastP.t) {
         path += ` L ${getX(currentNow).toFixed(1)},${scaleY(lastP.val).toFixed(1)}`;
       }
@@ -1097,7 +1110,7 @@ class AutoTPILearningCard extends LitElement {
         path += ` L ${getX(p2.t).toFixed(1)},${scaleY(p2.val).toFixed(1)}`;
       }
       const lastP = data[data.length - 1];
-      const currentNow = Date.now();
+      const currentNow = this._history?.endTime || Date.now();
       if (currentNow > lastP.t) {
         path += ` L ${getX(currentNow).toFixed(1)},${scaleY(lastP.val).toFixed(1)}`;
       }
@@ -1133,7 +1146,7 @@ class AutoTPILearningCard extends LitElement {
         if (!heating[i]) continue;
         if (heating[i].val === 1) {
           const t1 = heating[i].t;
-          const t2 = (i < heating.length - 1) ? heating[i + 1].t : Date.now();
+          const t2 = (i < heating.length - 1) ? heating[i + 1].t : (this._history?.endTime || Date.now());
           if (t2 < xMin || t1 > xMax) continue;
 
           const x1 = getX(t1);
