@@ -1354,16 +1354,6 @@ class AutoTPILearningCard extends LitElement {
             <div class="header-title">${this.config.name || 'Auto-TPI Learning'}</div>
             
             <div class="controls-container">
-               ${!isStateOn ? html`
-                <div class="checkbox-container" @click="${() => this._toggleResetCheckbox()}">
-                  <ha-checkbox
-                    .checked=${this._resetChecked}
-                    style="pointer-events: none;"
-                  ></ha-checkbox>
-                  <span class="checkbox-label">Reset</span>
-                </div>
-              ` : ''}
-
               <mwc-button
                 @click=${() => this._toggleAutoTpi(isStateOn)}
                 class="${isStateOn ? 'stop-btn' : 'start-btn'}"
@@ -1373,6 +1363,18 @@ class AutoTPILearningCard extends LitElement {
                 <ha-icon icon="${buttonIcon}" style="margin-right: 4px;"></ha-icon>
                 ${buttonLabel}
               </mwc-button>
+
+               ${!isStateOn ? html`
+                <div class="checkbox-container" @click="${() => this._toggleResetCheckbox()}">
+                  <div style="width: 24px; display: flex; justify-content: center; margin-right: 4px; margin-left: 11px;">
+                    <ha-checkbox
+                      .checked=${this._resetChecked}
+                      style="pointer-events: none;"
+                    ></ha-checkbox>
+                  </div>
+                  <span class="checkbox-label">Reset</span>
+                </div>
+              ` : ''}
             </div>
           </div>
 
@@ -1473,14 +1475,16 @@ class AutoTPILearningCard extends LitElement {
     }
     .controls-container {
       display: flex;
-      align-items: center;
-      gap: 12px;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0px;
     }
     .checkbox-container {
       display: flex;
       align-items: center;
       cursor: pointer;
       user-select: none;
+      width: 100%;
     }
     .checkbox-label {
       font-size: 14px;
@@ -1492,11 +1496,15 @@ class AutoTPILearningCard extends LitElement {
       --mdc-theme-primary: var(--success-color, #4CAF50);
       --mdc-theme-on-primary: white;
       cursor: pointer;
+      padding-left: 10px;
+      margin-bottom: -8px;
     }
     mwc-button.stop-btn {
       --mdc-theme-primary: var(--error-color, #F44336);
       --mdc-theme-on-primary: white;
       cursor: pointer;
+      padding-left: 10px;
+      margin-bottom: -8px;
     }
 
     .telemetry {
