@@ -21,12 +21,12 @@ This card is available in HACS (Home Assistant Community Store).
 
 1.  Click the button below to add this repository to HACS:
 
-    [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=KipK bouton&repository=auto-tpi-learning-card&category=plugin)
+    [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=KipK&bouton&repository=auto-tpi-learning-card&category=plugin)
 
 2.  **Or** manually add this repository URL to HACS:
     *   Go to **HACS** > **Frontend**.
     *   Click the 3 dots in the top right corner > **Custom repositories**.
-    *   URL: `https://github.com/jmcollin78/auto-tpi-learning-card`
+    *   URL: `https://github.com/KipK/auto-tpi-learning-card`
     *   Category: **Lovelace**
     *   Click **Add**.
 
