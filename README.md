@@ -36,7 +36,7 @@ This card is available in HACS (Home Assistant Community Store).
 
 ### Manual Installation
 
-1.  Download the `auto-tpi-learning-card.js` file from the [Releases](https://github.com/jmcollin78/auto-tpi-learning-card/releases) page or the `dist` folder.
+1.  Download the `auto-tpi-learning-card.js` file from the [Releases](https://github.com/KipK/auto-tpi-learning-card/releases) page or the `dist` folder.
 2.  Copy the file to your Home Assistant `config/www/community/auto-tpi-learning-card/` directory.
 3.  Add the resource to your Dashboard:
     *   Go to **Settings** > **Dashboards** > **Three dots** (top right) > **Resources**.
