@@ -1592,7 +1592,7 @@ class AutoTPILearningCard extends LitElement {
       opacity: 0.6;
     }
     .checkbox-label {
-      font-size: 14px;
+      font-size: 12px;
       margin-left: 4px;
     }
 
