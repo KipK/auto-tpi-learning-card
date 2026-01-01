@@ -2,7 +2,7 @@ name: Build & attach JS to release
 
 on:
   release:
-    types: [created,edited]
+    types: [created]
 
 jobs:
   build:
