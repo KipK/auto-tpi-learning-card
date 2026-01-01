@@ -31,7 +31,10 @@ class AutoTPILearningCard extends LitElement {
     _pinchStartDist: { type: Number },
     _pinchStartZoom: { type: Number },
     _pinchStartYZoom: { type: Number },
-    _resetChecked: { type: Boolean }
+    _resetChecked: { type: Boolean },
+    _boostKintChecked: { type: Boolean },
+    _unboostKextChecked: { type: Boolean },
+    _showOptions: { type: Boolean }
   };
 
   static getConfigElement() {
@@ -73,6 +76,9 @@ class AutoTPILearningCard extends LitElement {
     this._dragStartY = 0;
     this._dragStartYOffset = 0;
     this._resetChecked = false;
+    this._boostKintChecked = false;
+    this._unboostKextChecked = false;
+    this._showOptions = false;
   }
 
   connectedCallback() {
@@ -371,7 +377,9 @@ class AutoTPILearningCard extends LitElement {
       confidence: parseFloat(entity.attributes.model_confidence) || 0,
       status: entity.attributes.last_learning_status || '',
       learningStartDt: entity.attributes.learning_start_dt || '',
-      learningDone: entity.attributes.learning_done
+      learningDone: entity.attributes.learning_done,
+      allowKintBoost: entity.attributes.allow_kint_boost_on_stagnation,
+      allowKextCompensation: entity.attributes.allow_kext_compensation_on_overshoot
     };
   }
 
@@ -392,7 +400,9 @@ class AutoTPILearningCard extends LitElement {
         this.hass.callService('versatile_thermostat', 'set_auto_tpi_mode', {
             entity_id: this.config.climate_entity,
             auto_tpi_mode: true,
-            reinitialise: this._resetChecked
+            reinitialise: this._resetChecked,
+            allow_kint_boost_on_stagnation: this._boostKintChecked,
+            allow_kext_compensation_on_overshoot: this._unboostKextChecked
         });
     }
 
@@ -403,6 +413,20 @@ class AutoTPILearningCard extends LitElement {
   _toggleResetCheckbox() {
     this._resetChecked = !this._resetChecked;
     this.requestUpdate();
+  }
+
+  _toggleBoostKintCheckbox() {
+    this._boostKintChecked = !this._boostKintChecked;
+    this.requestUpdate();
+  }
+
+  _toggleUnboostKextCheckbox() {
+    this._unboostKextChecked = !this._unboostKextChecked;
+    this.requestUpdate();
+  }
+
+  _toggleOptions() {
+    this._showOptions = !this._showOptions;
   }
 
   _toggleHeating() {
@@ -1354,27 +1378,79 @@ class AutoTPILearningCard extends LitElement {
             <div class="header-title">${this.config.name || 'Auto-TPI Learning'}</div>
             
             <div class="controls-container">
-              <mwc-button
-                @click=${() => this._toggleAutoTpi(isStateOn)}
-                class="${isStateOn ? 'stop-btn' : 'start-btn'}"
-                dense
-                raised
-              >
-                <ha-icon icon="${buttonIcon}" style="margin-right: 4px;"></ha-icon>
-                ${buttonLabel}
-              </mwc-button>
+              <div class="main-controls">
+                <mwc-button
+                  @click=${() => this._toggleAutoTpi(isStateOn)}
+                  class="${isStateOn ? 'stop-btn' : 'start-btn'}"
+                  dense
+                  raised
+                >
+                  <ha-icon icon="${buttonIcon}" style="margin-right: 4px;"></ha-icon>
+                  ${buttonLabel}
+                </mwc-button>
+                <ha-icon-button
+                   @click="${() => this._toggleOptions()}"
+                   style="margin-left: 0px; color: var(--secondary-text-color);"
+                   title="Options"
+                >
+                  <ha-icon icon="${this._showOptions ? 'mdi:chevron-up' : 'mdi:chevron-down'}"></ha-icon>
+                </ha-icon-button>
+              </div>
 
-               ${!isStateOn ? html`
-                <div class="checkbox-container" @click="${() => this._toggleResetCheckbox()}">
-                  <div style="width: 24px; display: flex; justify-content: center; margin-right: 4px; margin-left: 11px;">
-                    <ha-checkbox
-                      .checked=${this._resetChecked}
-                      style="pointer-events: none;"
-                    ></ha-checkbox>
+               ${this._showOptions ? html`
+                 <div class="options-container">
+                 ${!isStateOn ? html`
+                  <div class="checkbox-container" @click="${() => this._toggleResetCheckbox()}">
+                    <div style="width: 24px; display: flex; justify-content: center; margin-right: 4px;">
+                      <ha-checkbox
+                        .checked=${this._resetChecked}
+                        style="pointer-events: none;"
+                      ></ha-checkbox>
+                    </div>
+                    <span class="checkbox-label">Reset</span>
                   </div>
-                  <span class="checkbox-label">Reset</span>
+                  <div class="checkbox-container" @click="${() => this._toggleBoostKintCheckbox()}">
+                    <div style="width: 24px; display: flex; justify-content: center; margin-right: 4px;">
+                      <ha-checkbox
+                        .checked=${this._boostKintChecked}
+                        style="pointer-events: none;"
+                      ></ha-checkbox>
+                    </div>
+                    <span class="checkbox-label">boost Kint on stagnation</span>
+                  </div>
+                   <div class="checkbox-container" @click="${() => this._toggleUnboostKextCheckbox()}">
+                    <div style="width: 24px; display: flex; justify-content: center; margin-right: 4px;">
+                      <ha-checkbox
+                        .checked=${this._unboostKextChecked}
+                        style="pointer-events: none;"
+                      ></ha-checkbox>
+                    </div>
+                    <span class="checkbox-label">unboost Kext on overshoot</span>
+                  </div>
+                ` : html`
+                  <div class="checkbox-container disabled">
+                    <div style="width: 24px; display: flex; justify-content: center; margin-right: 4px;">
+                      <ha-checkbox
+                        .checked=${learningData.allowKintBoost}
+                        disabled
+                        style="pointer-events: none;"
+                      ></ha-checkbox>
+                    </div>
+                    <span class="checkbox-label">boost Kint on stagnation</span>
+                  </div>
+                  <div class="checkbox-container disabled">
+                    <div style="width: 24px; display: flex; justify-content: center; margin-right: 4px;">
+                      <ha-checkbox
+                        .checked=${learningData.allowKextCompensation}
+                        disabled
+                        style="pointer-events: none;"
+                      ></ha-checkbox>
+                    </div>
+                    <span class="checkbox-label">unboost Kext on overshoot</span>
+                  </div>
+                `}
                 </div>
-              ` : ''}
+               ` : ''}
             </div>
           </div>
 
@@ -1466,18 +1542,39 @@ class AutoTPILearningCard extends LitElement {
     .header-row {
       display: flex;
       justify-content: space-between;
-      align-items: center;
+      align-items: flex-start;
       margin-bottom: 16px;
     }
     .header-title {
       font-size: 16px;
       font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: calc(100% - 200px);
+      margin-top: 8px;
     }
     .controls-container {
       display: flex;
       flex-direction: column;
-      align-items: flex-start;
+      align-items: flex-end;
       gap: 0px;
+    }
+    .main-controls {
+      display: flex;
+      align-items: center;
+    }
+    .options-container {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      margin-top: 8px;
+      margin-right: 8px;
+      padding: 8px;
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 4px;
+      width: 100%;
+      box-sizing: border-box;
     }
     .checkbox-container {
       display: flex;
@@ -1485,6 +1582,14 @@ class AutoTPILearningCard extends LitElement {
       cursor: pointer;
       user-select: none;
       width: 100%;
+      margin-bottom: -15px;
+    }
+    .checkbox-container:last-child {
+        margin-bottom: 0px;
+    }
+    .checkbox-container.disabled {
+      cursor: default;
+      opacity: 0.6;
     }
     .checkbox-label {
       font-size: 14px;
