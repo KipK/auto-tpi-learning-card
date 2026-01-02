@@ -1,4 +1,4 @@
-import { LitElement, html, css, svg } from 'https://cdn.jsdelivr.net/gh/lit/dist@3/core/lit-core.min.js';
+import { LitElement, html, css, svg } from 'lit';
 
 class AutoTPILearningCard extends LitElement {
   static properties = {

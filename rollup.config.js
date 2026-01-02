@@ -1,3 +1,4 @@
+import nodeResolve from '@rollup/plugin-node-resolve';
 import terser from '@rollup/plugin-terser';
 import gzipPlugin from 'rollup-plugin-gzip';
 
@@ -7,9 +8,8 @@ export default {
     file: 'dist/auto-tpi-learning-card.js',
     format: 'es',
   },
-  // Treat the CDN import as external to prevent Rollup from trying to resolve it
-  external: ['https://cdn.jsdelivr.net/gh/lit/dist@3/core/lit-core.min.js'],
   plugins: [
+    nodeResolve(),
     terser(),
     gzipPlugin()
   ]
