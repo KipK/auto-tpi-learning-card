@@ -1364,7 +1364,7 @@ class AutoTPILearningCard extends LitElement {
     }
 
     const confidence = Math.round(learningData.confidence * 100);
-    const isStateOn = learningData.state === 'Active';
+    const isStateOn = learningData.state !== 'Off';
     const autoTpiState = isStateOn ? 'Active' : 'Off';
     const status = learningData.status || 'Waiting for update...';
 
