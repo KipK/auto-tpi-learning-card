@@ -76,7 +76,7 @@ class AutoTPILearningCard extends LitElement {
     this._dragStartY = 0;
     this._dragStartYOffset = 0;
     this._resetChecked = false;
-    this._boostKintChecked = false;
+    this._boostKintChecked = true;
     this._unboostKextChecked = false;
     this._showOptions = false;
   }
