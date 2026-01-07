@@ -170,6 +170,16 @@ class AutoTPILearningCard extends LitElement {
         this._lastStartDt = currentStartDt;
       }
 
+      // Check if current history matches the current start time
+      // This recovers from situations where learning_start_dt was temporarily unavailable
+      // and the card fetched a default 24h history containing old "finished" states.
+      if (this._history && currentStartDt) {
+        const currentStartTs = new Date(currentStartDt).getTime();
+        if (Math.abs(this._history.startTime - currentStartTs) > 1000) {
+          this._history = null;
+        }
+      }
+
       const now = Date.now();
       const isStale = (now - this._lastFetchTime) > 5 * 60 * 1000;
       const isFinished = this._history && this._history.endTime;
