@@ -367,6 +367,21 @@ class AutoTPILearningCard extends LitElement {
       series[key].sort((a, b) => a.t - b.t);
     }
 
+    // Safety Check: If the entity is currently active (not in a finished state),
+    // we should NOT have an endTime. If we detected one from history (e.g. from old data
+    // before a reset if start_dt was missing), we must ignore it to keep the graph live.
+    const currentEntity = this.hass.states[learningEntityId];
+    if (currentEntity) {
+      const isCurrentlyOff = currentEntity.state === 'Off';
+      const currentKintCycles = currentEntity.attributes.coeff_int_cycles || 0;
+      const currentKextCycles = currentEntity.attributes.coeff_ext_cycles || 0;
+      const isActuallyFinished = isCurrentlyOff && currentKintCycles >= 50 && currentKextCycles >= 50;
+
+      if (!isActuallyFinished) {
+        endTime = null;
+      }
+    }
+
     this._history = {
       ...series,
       startTime: startTime.getTime(),
