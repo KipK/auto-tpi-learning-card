@@ -1500,7 +1500,7 @@ class AutoTPILearningCard extends LitElement {
               </div>
 
               <div class="telem-line status">
-                ${status}
+                Last cycle: ${status}
               </div>
             </div>
             

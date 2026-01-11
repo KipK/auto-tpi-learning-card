@@ -203,7 +203,7 @@ const b=globalThis,w=t=>t,k=b.trustedTypes,S=k?k.createPolicy("lit-html",{create
               </div>
 
               <div class="telem-line status">
-                ${o}
+                Last cycle: ${o}
               </div>
             </div>
             
