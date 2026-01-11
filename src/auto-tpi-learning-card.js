@@ -927,7 +927,7 @@ class AutoTPILearningCard extends LitElement {
     }
 
     let activeValue = kintValue;
-    let activeColor = 'rgb(255, 235, 59)';
+    let activeColor = '#06B6D4';
     let activeTitle = 'Coef INT';
     let activeY = yKint;
     let precision = 4;
@@ -1230,7 +1230,7 @@ class AutoTPILearningCard extends LitElement {
       const y = getY_Kint(val);
       return svg`
         <line x1="${padding.left}" y1="${y}" x2="${width - padding.right}" y2="${y}" stroke="var(--divider-color, #444)" stroke-width="1" opacity="0.3" />
-        <text x="${padding.left - 8}" y="${y + 5}" text-anchor="end" font-size="12" fill="rgb(255, 235, 59)" opacity="0.9">${val.toFixed(2)}</text>
+        <text x="${padding.left - 8}" y="${y + 5}" text-anchor="end" font-size="12" fill="#06B6D4" opacity="0.9">${val.toFixed(2)}</text>
       `;
     });
 
@@ -1299,7 +1299,7 @@ class AutoTPILearningCard extends LitElement {
       ${tempPath ? svg`<path d="${tempPath}" fill="none" stroke="rgb(33, 150, 243)" stroke-width="1.5" opacity="0.7" style="pointer-events: none;" clip-path="url(#chart-clip)" />` : ''}
       ${extTempPath ? svg`<path d="${extTempPath}" fill="none" stroke="rgb(25, 50, 100)" stroke-width="1.5" opacity="0.9" style="pointer-events: none;" clip-path="url(#chart-clip)" />` : ''}
       ${kextPath ? svg`<path d="${kextPath}" fill="none" stroke="rgb(76, 175, 80)" stroke-width="2" style="pointer-events: none;" clip-path="url(#chart-clip)" />` : ''}
-      ${kintPath ? svg`<path d="${kintPath}" fill="none" stroke="rgb(255, 235, 59)" stroke-width="2.5" style="pointer-events: none;" clip-path="url(#chart-clip)" />` : ''}
+      ${kintPath ? svg`<path d="${kintPath}" fill="none" stroke="#06B6D4" stroke-width="2.5" style="pointer-events: none;" clip-path="url(#chart-clip)" />` : ''}
     `;
   }
 
@@ -1672,7 +1672,7 @@ class AutoTPILearningCard extends LitElement {
       opacity: 0.8;
       margin-right: 4px;
     }
-    .kint-color { color: rgb(255, 235, 59); font-weight: bold; }
+    .kint-color { color: #06B6D4; font-weight: bold; }
     .kext-color { color: rgb(76, 175, 80); font-weight: bold; }
     
     .chart-container {
@@ -1729,7 +1729,7 @@ class AutoTPILearningCard extends LitElement {
     }
     .clickable { cursor: pointer; user-select: none; }
     .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
-    .kint-bg { background: rgb(255, 235, 59); }
+    .kint-bg { background: #06B6D4; }
     .kext-bg { background: rgb(76, 175, 80); }
     .temp-bg { background: rgb(33, 150, 243); }
     .heating-bg { background: rgba(255, 152, 0, 0.7); }
