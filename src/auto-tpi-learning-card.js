@@ -927,31 +927,31 @@ class AutoTPILearningCard extends LitElement {
     }
 
     let activeValue = kintValue;
-    let activeColor = '#06B6D4';
+    let activeColor = 'var(--chart-color-kint)';
     let activeTitle = 'Coef INT';
     let activeY = yKint;
     let precision = 4;
 
     if (active === 'kext') {
       activeValue = kextValue;
-      activeColor = 'rgb(76, 175, 80)';
+      activeColor = 'var(--chart-color-kext)';
       activeTitle = 'Coef EXT';
       activeY = yKext;
     } else if (active === 'temp') {
       activeValue = tempValue;
-      activeColor = 'rgb(33, 150, 243)';
+      activeColor = 'var(--chart-color-temp)';
       activeTitle = 'Température';
       activeY = yTemp;
       precision = 1;
     } else if (active === 'extTemp') {
       activeValue = extTempValue;
-      activeColor = 'rgb(25, 50, 100)';
+      activeColor = 'var(--chart-color-ext-temp)';
       activeTitle = 'Ext Temp';
       activeY = yExtTemp;
       precision = 1;
     } else if (active === 'setpoint') {
       activeValue = setpointValue;
-      activeColor = 'rgba(255, 152, 0, 0.8)';
+      activeColor = 'var(--chart-color-setpoint)';
       activeTitle = 'Consigne';
       activeY = ySetpoint;
       precision = 1;
@@ -1211,7 +1211,7 @@ class AutoTPILearningCard extends LitElement {
                 y="${padding.top + chartHeight - 20}"
                 width="${rectWidth}"
                 height="20"
-                fill="rgba(255, 152, 0, 0.5)"
+                fill="var(--chart-color-heating)"
                 clip-path="url(#chart-clip)"
               />
             `);
@@ -1229,8 +1229,8 @@ class AutoTPILearningCard extends LitElement {
     const kintGrid = kintTicks.map(val => {
       const y = getY_Kint(val);
       return svg`
-        <line x1="${padding.left}" y1="${y}" x2="${width - padding.right}" y2="${y}" stroke="var(--divider-color, #444)" stroke-width="1" opacity="0.3" />
-        <text x="${padding.left - 8}" y="${y + 5}" text-anchor="end" font-size="12" fill="#06B6D4" opacity="0.9">${val.toFixed(2)}</text>
+        <line x1="${padding.left}" y1="${y}" x2="${width - padding.right}" y2="${y}" stroke="var(--chart-color-grid)" stroke-width="1" opacity="0.3" />
+        <text x="${padding.left - 8}" y="${y + 5}" text-anchor="end" font-size="12" fill="var(--chart-color-kint)" opacity="0.9">${val.toFixed(2)}</text>
       `;
     });
 
@@ -1242,7 +1242,7 @@ class AutoTPILearningCard extends LitElement {
     const kextLabels = kextTicks.map(val => {
       const y = getY_Kext(val);
       return svg`
-        <text x="${width - padding.right + 8}" y="${y + 5}" text-anchor="start" font-size="12" fill="rgb(76, 175, 80)" opacity="0.9">${val.toFixed(2)}</text>
+        <text x="${width - padding.right + 8}" y="${y + 5}" text-anchor="start" font-size="12" fill="var(--chart-color-kext)" opacity="0.9">${val.toFixed(2)}</text>
       `;
     });
 
@@ -1272,9 +1272,9 @@ class AutoTPILearningCard extends LitElement {
           subLabel = d.toLocaleDateString('fr-FR', dayOptions);
         }
         timeLabels.push(svg`
-          <line x1="${xPos}" y1="${padding.top + chartHeight}" x2="${xPos}" y2="${padding.top + chartHeight + 5}" stroke="#aaa" stroke-width="1" />
-          <text x="${xPos}" y="${height - 18}" text-anchor="middle" font-size="12" fill="#aaa">${label}</text>
-          ${subLabel ? svg`<text x="${xPos}" y="${height - 4}" text-anchor="middle" font-size="10" fill="#888">${subLabel}</text>` : ''}
+          <line x1="${xPos}" y1="${padding.top + chartHeight}" x2="${xPos}" y2="${padding.top + chartHeight + 5}" stroke="var(--chart-color-time-label)" stroke-width="1" />
+          <text x="${xPos}" y="${height - 18}" text-anchor="middle" font-size="12" fill="var(--chart-color-time-label)">${label}</text>
+          ${subLabel ? svg`<text x="${xPos}" y="${height - 4}" text-anchor="middle" font-size="10" fill="var(--chart-color-sub-label)">${subLabel}</text>` : ''}
         `);
       }
       currentTickTime += 3600000;
@@ -1291,15 +1291,15 @@ class AutoTPILearningCard extends LitElement {
       ${kextLabels}
       ${timeLabels}
 
-      <rect x="${padding.left}" y="${padding.top}" width="${chartWidth}" height="${chartHeight}" fill="transparent" stroke="var(--divider-color, #444)" stroke-width="1" opacity="0.5" />
+      <rect x="${padding.left}" y="${padding.top}" width="${chartWidth}" height="${chartHeight}" fill="transparent" stroke="var(--chart-color-grid)" stroke-width="1" opacity="0.5" />
 
       ${heatingRects}
-      ${setpointFilledPath ? svg`<path d="${setpointFilledPath}" fill="rgba(255, 152, 0, 0.4)" stroke="none" style="pointer-events: none;" clip-path="url(#chart-clip)" />` : ''}
-      ${setpointPath ? svg`<path d="${setpointPath}" fill="none" stroke="rgba(255, 152, 0, 0.8)" stroke-width="2" style="pointer-events: none;" clip-path="url(#chart-clip)" />` : ''}
-      ${tempPath ? svg`<path d="${tempPath}" fill="none" stroke="rgb(33, 150, 243)" stroke-width="1.5" opacity="0.7" style="pointer-events: none;" clip-path="url(#chart-clip)" />` : ''}
-      ${extTempPath ? svg`<path d="${extTempPath}" fill="none" stroke="rgb(25, 50, 100)" stroke-width="1.5" opacity="0.9" style="pointer-events: none;" clip-path="url(#chart-clip)" />` : ''}
-      ${kextPath ? svg`<path d="${kextPath}" fill="none" stroke="rgb(76, 175, 80)" stroke-width="2" style="pointer-events: none;" clip-path="url(#chart-clip)" />` : ''}
-      ${kintPath ? svg`<path d="${kintPath}" fill="none" stroke="#06B6D4" stroke-width="2.5" style="pointer-events: none;" clip-path="url(#chart-clip)" />` : ''}
+      ${setpointFilledPath ? svg`<path d="${setpointFilledPath}" fill="var(--chart-color-setpoint-fill)" stroke="none" style="pointer-events: none;" clip-path="url(#chart-clip)" />` : ''}
+      ${setpointPath ? svg`<path d="${setpointPath}" fill="none" stroke="var(--chart-color-setpoint)" stroke-width="2" style="pointer-events: none;" clip-path="url(#chart-clip)" />` : ''}
+      ${tempPath ? svg`<path d="${tempPath}" fill="none" stroke="var(--chart-color-temp)" stroke-width="1.5" opacity="0.7" style="pointer-events: none;" clip-path="url(#chart-clip)" />` : ''}
+      ${extTempPath ? svg`<path d="${extTempPath}" fill="none" stroke="var(--chart-color-ext-temp)" stroke-width="1.5" opacity="0.9" style="pointer-events: none;" clip-path="url(#chart-clip)" />` : ''}
+      ${kextPath ? svg`<path d="${kextPath}" fill="none" stroke="var(--chart-color-kext)" stroke-width="2" style="pointer-events: none;" clip-path="url(#chart-clip)" />` : ''}
+      ${kintPath ? svg`<path d="${kintPath}" fill="none" stroke="var(--chart-color-kint)" stroke-width="2.5" style="pointer-events: none;" clip-path="url(#chart-clip)" />` : ''}
     `;
   }
 
@@ -1549,6 +1549,17 @@ class AutoTPILearningCard extends LitElement {
   static styles = css`
     :host {
       display: block;
+      /* Define CSS variables for chart colors */
+      --chart-color-kint: #06B6D4;
+      --chart-color-kext: rgb(76, 175, 80);
+      --chart-color-temp: rgb(33, 150, 243);
+      --chart-color-ext-temp: rgb(25, 50, 100);
+      --chart-color-setpoint: rgba(255, 152, 0, 0.8);
+      --chart-color-setpoint-fill: rgba(255, 152, 0, 0.4);
+      --chart-color-heating: rgba(255, 152, 0, 0.7);
+      --chart-color-grid: #444;
+      --chart-color-time-label: #aaa;
+      --chart-color-sub-label: #888;
     }
     ha-card {
       background: var(--ha-card-background, var(--card-background-color));
@@ -1672,8 +1683,8 @@ class AutoTPILearningCard extends LitElement {
       opacity: 0.8;
       margin-right: 4px;
     }
-    .kint-color { color: #06B6D4; font-weight: bold; }
-    .kext-color { color: rgb(76, 175, 80); font-weight: bold; }
+    .kint-color { color: var(--chart-color-kint); font-weight: bold; }
+    .kext-color { color: var(--chart-color-kext); font-weight: bold; }
     
     .chart-container {
       width: 100%;
@@ -1729,12 +1740,12 @@ class AutoTPILearningCard extends LitElement {
     }
     .clickable { cursor: pointer; user-select: none; }
     .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
-    .kint-bg { background: #06B6D4; }
-    .kext-bg { background: rgb(76, 175, 80); }
-    .temp-bg { background: rgb(33, 150, 243); }
-    .heating-bg { background: rgba(255, 152, 0, 0.7); }
-    .setpoint-bg { background: rgba(255, 152, 0, 0.7); }
-    .ext-temp-bg { background: rgb(25, 50, 100); }
+    .kint-bg { background: var(--chart-color-kint); }
+    .kext-bg { background: var(--chart-color-kext); }
+    .temp-bg { background: var(--chart-color-temp); }
+    .heating-bg { background: var(--chart-color-heating); }
+    .setpoint-bg { background: var(--chart-color-setpoint); }
+    .ext-temp-bg { background: var(--chart-color-ext-temp); }
   `;
 }
 
