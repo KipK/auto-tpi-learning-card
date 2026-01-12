@@ -13,6 +13,7 @@ class AutoTPILearningCard extends LitElement {
     _showKint: { type: Boolean },
     _showKext: { type: Boolean },
     _showExtTemp: { type: Boolean },
+    _showMaxCapacity: { type: Boolean },
     _lastFetchTime: { type: Number },
     _lastStartDt: { type: String },
     _tooltip: { type: Object },
@@ -60,6 +61,7 @@ class AutoTPILearningCard extends LitElement {
     this._showKint = true;
     this._showKext = true;
     this._showExtTemp = true;
+    this._showMaxCapacity = true;
     this._lastFetchTime = 0;
     this._lastStartDt = null;
     this._tooltip = null;
@@ -143,14 +145,15 @@ class AutoTPILearningCard extends LitElement {
     }
 
     // Invalidate Static Content if visibility flags change
-    // (Chart State doesn't need to change because it contains all data, 
+    // (Chart State doesn't need to change because it contains all data,
     // but Static Content generation depends on these flags)
     if (changedProps.has('_showTemp') ||
       changedProps.has('_showHeating') ||
       changedProps.has('_showSetpoint') ||
       changedProps.has('_showKint') ||
       changedProps.has('_showKext') ||
-      changedProps.has('_showExtTemp')) {
+      changedProps.has('_showExtTemp') ||
+      changedProps.has('_showMaxCapacity')) {
       this._staticChartContent = null;
     }
   }
@@ -297,7 +300,7 @@ class AutoTPILearningCard extends LitElement {
 
   _processHistory(rawHistory, learningEntityId, climateEntityId, startTime) {
     if (!Array.isArray(rawHistory)) {
-      this._history = { kint: [], kext: [], temp: [], heating: [], setpoint: [], extTemp: [], startTime: startTime.getTime() };
+      this._history = { kint: [], kext: [], temp: [], heating: [], setpoint: [], extTemp: [], maxCapacity: [], startTime: startTime.getTime() };
       return;
     }
 
@@ -307,7 +310,8 @@ class AutoTPILearningCard extends LitElement {
       temp: [],
       heating: [],
       setpoint: [],
-      extTemp: []
+      extTemp: [],
+      maxCapacity: []
     };
 
     let endTime = null;
@@ -343,6 +347,10 @@ class AutoTPILearningCard extends LitElement {
 
           if (attrs.calculated_coef_int != null) safePush(series.kint, t, attrs.calculated_coef_int);
           if (attrs.calculated_coef_ext != null) safePush(series.kext, t, attrs.calculated_coef_ext);
+
+          if (attrs.max_capacity_heat != null) {
+            safePush(series.maxCapacity, t, attrs.max_capacity_heat);
+          }
         } else {
           if (attrs.current_temperature != null) safePush(series.temp, t, attrs.current_temperature);
           if (attrs.temperature != null) safePush(series.setpoint, t, attrs.temperature);
@@ -406,6 +414,14 @@ class AutoTPILearningCard extends LitElement {
       allowKintBoost: entity.attributes.allow_kint_boost_on_stagnation,
       allowKextCompensation: entity.attributes.allow_kext_compensation_on_overshoot
     };
+  }
+
+  _getCurrentMaxCapacity() {
+    const entity = this.hass.states[this.config.learning_entity];
+    const maxCapacity = entity.attributes.max_capacity_heat;
+    if (maxCapacity === null || maxCapacity === undefined) return 'N/A';
+    
+    return parseFloat(maxCapacity).toFixed(2);
   }
 
   _toggleAutoTpi(isStateOn) {
@@ -474,6 +490,10 @@ class AutoTPILearningCard extends LitElement {
     this._showExtTemp = !this._showExtTemp;
   }
 
+  _toggleMaxCapacity() {
+    this._showMaxCapacity = !this._showMaxCapacity;
+  }
+
   _toggleTemp() {
     this._showTemp = !this._showTemp;
   }
@@ -489,7 +509,7 @@ class AutoTPILearningCard extends LitElement {
     const mouseY = e.clientY - rect.top;
 
     // Calculate chart dimensions and padding
-    const padding = { left: 60, right: 60, top: 40, bottom: 60 };
+    const padding = { left: 60, right: 100, top: 40, bottom: 60 };
     const chartWidth = rect.width - padding.left - padding.right;
     const chartHeight = rect.height - padding.top - padding.bottom;
     const clampedX = Math.max(0, Math.min(1, (mouseX - padding.left) / chartWidth));
@@ -664,7 +684,7 @@ class AutoTPILearningCard extends LitElement {
 
     const svg = e.currentTarget;
     const rect = svg.getBoundingClientRect();
-    const padding = { left: 60, right: 60, top: 40, bottom: 60 };
+    const padding = { left: 60, right: 100, top: 40, bottom: 60 };
     const chartWidth = rect.width - padding.left - padding.right;
 
     const deltaX = this._dragStartX - e.clientX;
@@ -737,7 +757,7 @@ class AutoTPILearningCard extends LitElement {
 
     const svg = e.currentTarget;
     const rect = svg.getBoundingClientRect();
-    const padding = { left: 60, right: 60, top: 40, bottom: 60 };
+    const padding = { left: 60, right: 100, top: 40, bottom: 60 };
     const chartWidth = rect.width - padding.left - padding.right;
     const chartHeight = rect.height - padding.top - padding.bottom;
 
@@ -845,8 +865,8 @@ class AutoTPILearningCard extends LitElement {
 
     const {
       xMin, xMax, chartWidth, chartHeight, padding,
-      kint, kext, temp, extTemp, setpoint,
-      getY_Kint, getY_Kext, getY_Temp
+      kint, kext, temp, extTemp, setpoint, maxCapacity,
+      getY_Kint, getY_Kext, getY_Temp, getY_MaxCapacity
     } = this._chartState;
 
     const x = mouseX - padding.left;
@@ -897,20 +917,23 @@ class AutoTPILearningCard extends LitElement {
     const tempValue = this._showTemp ? findLinearValue(temp, t) : null;
     const extTempValue = this._showExtTemp ? findLinearValue(extTemp, t) : null;
     const setpointValue = this._showSetpoint ? findStepValue(setpoint, t) : null;
+    const maxCapacityValue = this._showMaxCapacity ? findLinearValue(maxCapacity, t) : null;
 
-    let yKint = Infinity, yKext = Infinity, yTemp = Infinity, yExtTemp = Infinity, ySetpoint = Infinity;
+    let yKint = Infinity, yKext = Infinity, yTemp = Infinity, yExtTemp = Infinity, ySetpoint = Infinity, yMaxCapacity = Infinity;
 
     if (kintValue !== null) yKint = getY_Kint(kintValue);
     if (kextValue !== null) yKext = getY_Kext(kextValue);
     if (tempValue !== null) yTemp = getY_Temp(tempValue);
     if (extTempValue !== null) yExtTemp = getY_Temp(extTempValue);
     if (setpointValue !== null) ySetpoint = getY_Temp(setpointValue);
+    if (maxCapacityValue !== null) yMaxCapacity = getY_MaxCapacity(maxCapacityValue);
 
     const distKint = Math.abs(mouseY - yKint);
     const distKext = Math.abs(mouseY - yKext);
     const distTemp = Math.abs(mouseY - yTemp);
     const distExtTemp = Math.abs(mouseY - yExtTemp);
     const distSetpoint = Math.abs(mouseY - ySetpoint);
+    const distMaxCapacity = Math.abs(mouseY - yMaxCapacity);
 
     let active = 'kint';
     let minDist = distKint;
@@ -919,6 +942,7 @@ class AutoTPILearningCard extends LitElement {
     if (distTemp < minDist) { minDist = distTemp; active = 'temp'; }
     if (distExtTemp < minDist) { minDist = distExtTemp; active = 'extTemp'; }
     if (distSetpoint < minDist) { minDist = distSetpoint; active = 'setpoint'; }
+    if (distMaxCapacity < minDist) { minDist = distMaxCapacity; active = 'maxCapacity'; }
 
     // Check threshold (e.g. 50px)
     if (minDist > 50) {
@@ -952,9 +976,15 @@ class AutoTPILearningCard extends LitElement {
     } else if (active === 'setpoint') {
       activeValue = setpointValue;
       activeColor = 'var(--chart-color-setpoint)';
-      activeTitle = 'Consigne';
+      activeTitle = 'Setpoint';
       activeY = ySetpoint;
       precision = 1;
+    } else if (active === 'maxCapacity') {
+      activeValue = maxCapacityValue;
+      activeColor = 'var(--chart-color-max-capacity)';
+      activeTitle = 'Heat Rate';
+      activeY = yMaxCapacity;
+      precision = 2;
     }
 
     if (activeValue === null) {
@@ -1013,12 +1043,12 @@ class AutoTPILearningCard extends LitElement {
   _calculateChartState() {
     if (!this._history) return null;
 
-    const { kint, kext, temp, heating, setpoint, extTemp } = this._history;
+    const { kint, kext, temp, heating, setpoint, extTemp, maxCapacity } = this._history;
 
     const width = this._width > 0 ? this._width : 800;
     const height = 300;
 
-    const padding = { top: 10, right: 60, bottom: 40, left: 60 };
+    const padding = { top: 10, right: 100, bottom: 40, left: 60 };
     const chartWidth = width - padding.left - padding.right;
     const chartHeight = height - padding.top - padding.bottom;
 
@@ -1102,13 +1132,34 @@ class AutoTPILearningCard extends LitElement {
       return this._applyYZoom(baseY, padding.top, chartHeight);
     };
 
+    // Max Capacity - dynamic scaling based on actual data
+    let maxCapacityMin = 0, maxCapacityMax = 1;
+    if (maxCapacity.length > 0) {
+      const dataMin = Math.min(...maxCapacity.map(p => p.val));
+      const dataMax = Math.max(...maxCapacity.map(p => p.val));
+      maxCapacityMin = Math.max(0, Math.floor(dataMin - 0.5));
+      maxCapacityMax = Math.min(10, Math.ceil(dataMax + 0.5));
+      if (maxCapacityMax - maxCapacityMin < 1) {
+        const center = (maxCapacityMin + maxCapacityMax) / 2;
+        maxCapacityMin = Math.max(0, center - 0.5);
+        maxCapacityMax = Math.min(10, center + 0.5);
+      }
+    }
+
+    const getY_MaxCapacity = (val) => {
+      if (maxCapacityMax === maxCapacityMin) return padding.top + chartHeight / 2;
+      const baseY = padding.top + chartHeight - ((val - maxCapacityMin) / (maxCapacityMax - maxCapacityMin)) * chartHeight;
+      return this._applyYZoom(baseY, padding.top, chartHeight);
+    };
+
     return {
       width, height, padding, chartWidth, chartHeight,
       xMin, xMax,
-      getX, getY_Kint, getY_Kext, getY_Temp,
+      getX, getY_Kint, getY_Kext, getY_Temp, getY_MaxCapacity,
       kintMin, kintMax,
       kextMin, kextMax,
-      kint, kext, temp, heating, setpoint, extTemp
+      maxCapacityMin, maxCapacityMax,
+      kint, kext, temp, heating, setpoint, extTemp, maxCapacity
     };
   }
 
@@ -1118,10 +1169,11 @@ class AutoTPILearningCard extends LitElement {
     const {
       width, height, padding, chartWidth, chartHeight,
       xMin, xMax,
-      getX, getY_Kint, getY_Kext, getY_Temp,
+      getX, getY_Kint, getY_Kext, getY_Temp, getY_MaxCapacity,
       kintMin, kintMax,
       kextMin, kextMax,
-      kint, kext, temp, heating, setpoint, extTemp
+      maxCapacityMin, maxCapacityMax,
+      kint, kext, temp, heating, setpoint, extTemp, maxCapacity
     } = state;
 
     // Helper functions (defined here to capture scope)
@@ -1174,6 +1226,7 @@ class AutoTPILearningCard extends LitElement {
     const visibleTemp = this._showTemp ? this._getVisibleData(temp, xMin, xMax) : [];
     const visibleExtTemp = this._showExtTemp ? this._getVisibleData(extTemp, xMin, xMax) : [];
     const visibleSetpoint = this._showSetpoint ? this._getVisibleData(setpoint, xMin, xMax) : [];
+    const visibleMaxCapacity = this._showMaxCapacity ? this._getVisibleData(maxCapacity, xMin, xMax) : [];
 
     const kintPath = visibleKint.length > 0 ? createSteppedLinePath(visibleKint, getY_Kint) : '';
     const kextPath = visibleKext.length > 0 ? createSteppedLinePath(visibleKext, getY_Kext) : '';
@@ -1181,6 +1234,7 @@ class AutoTPILearningCard extends LitElement {
     const extTempPath = visibleExtTemp.length > 0 ? createLinePath(visibleExtTemp, getY_Temp) : '';
     const setpointPath = visibleSetpoint.length > 0 ? createSteppedLinePath(visibleSetpoint, getY_Temp) : '';
     const setpointFilledPath = visibleSetpoint.length > 0 ? createFilledSteppedAreaPath(visibleSetpoint, getY_Temp) : '';
+    const maxCapacityPath = visibleMaxCapacity.length > 0 ? createLinePath(visibleMaxCapacity, getY_MaxCapacity) : '';
 
     // Heating Rects
     const heatingRects = [];
@@ -1246,6 +1300,20 @@ class AutoTPILearningCard extends LitElement {
       `;
     });
 
+    // Max Capacity Grid and Labels
+    const maxCapacityTicks = [];
+    const maxCapacityStep = maxCapacityMax > 2 ? 1 : 0.5;
+    const maxCapacityStart = Math.ceil(maxCapacityMin / maxCapacityStep) * maxCapacityStep;
+    for (let v = maxCapacityStart; v <= maxCapacityMax + 0.001; v += maxCapacityStep) maxCapacityTicks.push(v);
+
+    const maxCapacityGrid = maxCapacityTicks.map(val => {
+      const y = getY_MaxCapacity(val);
+      return svg`
+        <line x1="${padding.left}" y1="${y}" x2="${width - padding.right}" y2="${y}" stroke="var(--chart-color-grid)" stroke-width="1" opacity="0.2" />
+        <text x="${width - padding.right + 42}" y="${y + 5}" text-anchor="start" font-size="12" fill="var(--chart-color-max-capacity)" opacity="0.9">${val.toFixed(1)}</text>
+      `;
+    });
+
     const timeLabels = [];
     const durationMs = xMax - xMin;
     const targetTicks = 5;
@@ -1289,6 +1357,7 @@ class AutoTPILearningCard extends LitElement {
 
       ${kintGrid}
       ${kextLabels}
+      ${maxCapacityGrid}
       ${timeLabels}
 
       <rect x="${padding.left}" y="${padding.top}" width="${chartWidth}" height="${chartHeight}" fill="transparent" stroke="var(--chart-color-grid)" stroke-width="1" opacity="0.5" />
@@ -1298,6 +1367,7 @@ class AutoTPILearningCard extends LitElement {
       ${setpointPath ? svg`<path d="${setpointPath}" fill="none" stroke="var(--chart-color-setpoint)" stroke-width="2" style="pointer-events: none;" clip-path="url(#chart-clip)" />` : ''}
       ${tempPath ? svg`<path d="${tempPath}" fill="none" stroke="var(--chart-color-temp)" stroke-width="1.5" opacity="0.7" style="pointer-events: none;" clip-path="url(#chart-clip)" />` : ''}
       ${extTempPath ? svg`<path d="${extTempPath}" fill="none" stroke="var(--chart-color-ext-temp)" stroke-width="1.5" opacity="0.9" style="pointer-events: none;" clip-path="url(#chart-clip)" />` : ''}
+      ${maxCapacityPath ? svg`<path d="${maxCapacityPath}" fill="none" stroke="var(--chart-color-max-capacity)" stroke-width="2" stroke-dasharray="5,5" style="pointer-events: none;" clip-path="url(#chart-clip)" />` : ''}
       ${kextPath ? svg`<path d="${kextPath}" fill="none" stroke="var(--chart-color-kext)" stroke-width="2" style="pointer-events: none;" clip-path="url(#chart-clip)" />` : ''}
       ${kintPath ? svg`<path d="${kintPath}" fill="none" stroke="var(--chart-color-kint)" stroke-width="2.5" style="pointer-events: none;" clip-path="url(#chart-clip)" />` : ''}
     `;
@@ -1493,9 +1563,12 @@ class AutoTPILearningCard extends LitElement {
                   <span class="kint-color">Kint: ${learningData.kint.toFixed(4)}</span>
                   <span style="font-size: 0.9em; opacity: 0.8;">Cycles: ${learningData.kintCycles}</span>
                 </div>
-                <div style="display: flex; flex-direction: column;">
+                <div style="display: flex; flex-direction: column; margin-right: 24px;">
                   <span class="kext-color">Kext: ${learningData.kext.toFixed(4)}</span>
                   <span style="font-size: 0.9em; opacity: 0.8;">Cycles: ${learningData.kextCycles}</span>
+                </div>
+                <div style="display: flex; flex-direction: column;">
+                  <span style="color: var(--chart-color-max-capacity); font-weight: bold;">Heat Rate: ${this._getCurrentMaxCapacity()}</span>
                 </div>
               </div>
 
@@ -1528,17 +1601,20 @@ class AutoTPILearningCard extends LitElement {
             <div class="legend-item clickable" @click="${() => this._toggleKext()}">
               <span class="dot kext-bg" style="opacity: ${this._showKext ? 1 : 0.3}"></span> Kext
             </div>
+            <div class="legend-item clickable" @click="${() => this._toggleMaxCapacity()}">
+              <span class="dot max-capacity-bg" style="opacity: ${this._showMaxCapacity ? 1 : 0.3}"></span> Hrate
+            </div>
             <div class="legend-item clickable" @click="${() => this._toggleSetpoint()}">
-              <span class="dot setpoint-bg" style="opacity: ${this._showSetpoint ? 1 : 0.3}"></span> SetPoint
+              <span class="dot setpoint-bg" style="opacity: ${this._showSetpoint ? 1 : 0.3}"></span> SPoint
             </div>
             <div class="legend-item clickable" @click="${() => this._toggleExtTemp()}">
-              <span class="dot ext-temp-bg" style="opacity: ${this._showExtTemp ? 1 : 0.3}"></span> ExtTemp
+              <span class="dot ext-temp-bg" style="opacity: ${this._showExtTemp ? 1 : 0.3}"></span> ExTemp
             </div>
             <div class="legend-item clickable" @click="${() => this._toggleTemp()}">
               <span class="dot temp-bg" style="opacity: ${this._showTemp ? 1 : 0.3}"></span> Temp
             </div>
             <div class="legend-item clickable" @click="${() => this._toggleHeating()}">
-              <span class="dot heating-bg" style="opacity: ${this._showHeating ? 1 : 0.3}"></span> Heating
+              <span class="dot heating-bg" style="opacity: ${this._showHeating ? 1 : 0.3}"></span> Heat
             </div>
           </div>
         </div>
@@ -1557,6 +1633,7 @@ class AutoTPILearningCard extends LitElement {
       --chart-color-setpoint: rgba(255, 152, 0, 0.8);
       --chart-color-setpoint-fill: rgba(255, 152, 0, 0.4);
       --chart-color-heating: rgba(255, 152, 0, 0.7);
+      --chart-color-max-capacity: rgb(255, 100, 100);
       --chart-color-grid: #444;
       --chart-color-time-label: #aaa;
       --chart-color-sub-label: #888;
@@ -1746,6 +1823,7 @@ class AutoTPILearningCard extends LitElement {
     .heating-bg { background: var(--chart-color-heating); }
     .setpoint-bg { background: var(--chart-color-setpoint); }
     .ext-temp-bg { background: var(--chart-color-ext-temp); }
+    .max-capacity-bg { background: var(--chart-color-max-capacity); }
   `;
 }
 
