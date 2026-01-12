@@ -964,7 +964,7 @@ class AutoTPILearningCard extends LitElement {
     } else if (active === 'temp') {
       activeValue = tempValue;
       activeColor = 'var(--chart-color-temp)';
-      activeTitle = 'Température';
+      activeTitle = 'Temp';
       activeY = yTemp;
       precision = 1;
     } else if (active === 'extTemp') {
