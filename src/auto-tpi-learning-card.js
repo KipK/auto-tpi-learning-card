@@ -420,7 +420,7 @@ class AutoTPILearningCard extends LitElement {
     const entity = this.hass.states[this.config.learning_entity];
     const maxCapacity = entity.attributes.max_capacity_heat;
     if (maxCapacity === null || maxCapacity === undefined) return 'N/A';
-    
+
     return parseFloat(maxCapacity).toFixed(2);
   }
 
@@ -428,23 +428,23 @@ class AutoTPILearningCard extends LitElement {
     if (!this.hass || !this.config) return;
 
     if (isStateOn) {
-        // We want to STOP
-        // reinitialise: false
-        this.hass.callService('versatile_thermostat', 'set_auto_tpi_mode', {
-          entity_id: this.config.climate_entity,
-          auto_tpi_mode: false,
-          reinitialise: false
-        });
+      // We want to STOP
+      // reinitialise: false
+      this.hass.callService('versatile_thermostat', 'set_auto_tpi_mode', {
+        entity_id: this.config.climate_entity,
+        auto_tpi_mode: false,
+        reinitialise: false
+      });
     } else {
-        // We want to START
-        // reinitialise depends on checkbox (default unchecked = false = Resume)
-        this.hass.callService('versatile_thermostat', 'set_auto_tpi_mode', {
-            entity_id: this.config.climate_entity,
-            auto_tpi_mode: true,
-            reinitialise: this._resetChecked,
-            allow_kint_boost_on_stagnation: this._boostKintChecked,
-            allow_kext_compensation_on_overshoot: this._unboostKextChecked
-        });
+      // We want to START
+      // reinitialise depends on checkbox (default unchecked = false = Resume)
+      this.hass.callService('versatile_thermostat', 'set_auto_tpi_mode', {
+        entity_id: this.config.climate_entity,
+        auto_tpi_mode: true,
+        reinitialise: this._resetChecked,
+        allow_kint_boost_on_stagnation: this._boostKintChecked,
+        allow_kext_compensation_on_overshoot: this._unboostKextChecked
+      });
     }
 
     // Reset the checkbox after action
@@ -1901,6 +1901,13 @@ class AutoTPILearningCardEditor extends LitElement {
     this.dispatchEvent(event);
   }
 
+  _getLearningSensors() {
+    if (!this.hass) return [];
+    return Object.keys(this.hass.states).filter(entityId =>
+      entityId.startsWith('sensor.') && entityId.endsWith('_auto_tpi_learning_state')
+    );
+  }
+
   render() {
     if (!this.hass || !this.config) {
       return html``;
@@ -1933,8 +1940,7 @@ class AutoTPILearningCardEditor extends LitElement {
           <ha-entity-picker
             .hass="${this.hass}"
             .value="${this.config.learning_entity || ''}"
-            .includeDomains="${['sensor']}"
-            .entityFilter="${(entityId) => entityId.includes('_auto_tpi_learning_state')}"
+            .includeEntities="${this._getLearningSensors()}"
             @value-changed="${this._learningChanged}"
             allow-custom-entity
           ></ha-entity-picker>
