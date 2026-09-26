@@ -1,4 +1,5 @@
 import { LitElement, html, css, svg } from 'lit';
+import { localize, localizeStatus, getLocale } from './localize.js';
 
 class AutoTPILearningCard extends LitElement {
   static properties = {
@@ -228,7 +229,7 @@ class AutoTPILearningCard extends LitElement {
 
     } catch (err) {
       console.error("Error fetching history:", err);
-      this._error = "Failed to fetch history data.";
+      this._error = localize(this.hass, 'fetch_error');
     } finally {
       this._loading = false;
     }
@@ -952,37 +953,37 @@ class AutoTPILearningCard extends LitElement {
 
     let activeValue = kintValue;
     let activeColor = 'var(--chart-color-kint)';
-    let activeTitle = 'Coef INT';
+    let activeTitle = localize(this.hass, 'coef_int');
     let activeY = yKint;
     let precision = 4;
 
     if (active === 'kext') {
       activeValue = kextValue;
       activeColor = 'var(--chart-color-kext)';
-      activeTitle = 'Coef EXT';
+      activeTitle = localize(this.hass, 'coef_ext');
       activeY = yKext;
     } else if (active === 'temp') {
       activeValue = tempValue;
       activeColor = 'var(--chart-color-temp)';
-      activeTitle = 'Temp';
+      activeTitle = localize(this.hass, 'temp');
       activeY = yTemp;
       precision = 1;
     } else if (active === 'extTemp') {
       activeValue = extTempValue;
       activeColor = 'var(--chart-color-ext-temp)';
-      activeTitle = 'Ext Temp';
+      activeTitle = localize(this.hass, 'ext_temp');
       activeY = yExtTemp;
       precision = 1;
     } else if (active === 'setpoint') {
       activeValue = setpointValue;
       activeColor = 'var(--chart-color-setpoint)';
-      activeTitle = 'Setpoint';
+      activeTitle = localize(this.hass, 'setpoint');
       activeY = ySetpoint;
       precision = 1;
     } else if (active === 'maxCapacity') {
       activeValue = maxCapacityValue;
       activeColor = 'var(--chart-color-max-capacity)';
-      activeTitle = 'Heat Rate';
+      activeTitle = localize(this.hass, 'heat_rate');
       activeY = yMaxCapacity;
       precision = 2;
     }
@@ -1013,7 +1014,7 @@ class AutoTPILearningCard extends LitElement {
 
     const date = new Date(this._tooltip.t);
     const dateOptions = { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' };
-    const dateStr = date.toLocaleString('fr-FR', dateOptions);
+    const dateStr = date.toLocaleString(getLocale(this.hass), dateOptions);
 
     const { x, targetY } = this._tooltip;
     const width = this._width > 0 ? this._width : 800;
@@ -1337,7 +1338,7 @@ class AutoTPILearningCard extends LitElement {
         let subLabel = '';
         if (h === 0) {
           const dayOptions = { day: 'numeric', month: 'short' };
-          subLabel = d.toLocaleDateString('fr-FR', dayOptions);
+          subLabel = d.toLocaleDateString(getLocale(this.hass), dayOptions);
         }
         timeLabels.push(svg`
           <line x1="${xPos}" y1="${padding.top + chartHeight}" x2="${xPos}" y2="${padding.top + chartHeight + 5}" stroke="var(--chart-color-time-label)" stroke-width="1" />
@@ -1374,10 +1375,10 @@ class AutoTPILearningCard extends LitElement {
   }
 
   _renderChart() {
-    if (this._loading) return html`<div class="loading">Loading history data...</div>`;
+    if (this._loading) return html`<div class="loading">${localize(this.hass, 'loading')}</div>`;
     if (this._error) return html`<div class="error">${this._error}</div>`;
     if (!this._history || (this._history.kint.length === 0 && this._history.kext.length === 0)) {
-      return html`<div class="no-data">No history data available</div>`;
+      return html`<div class="no-data">${localize(this.hass, 'no_data')}</div>`;
     }
 
     // 1. Calculate / Update State if needed
@@ -1452,7 +1453,7 @@ class AutoTPILearningCard extends LitElement {
       return html`
         <ha-card>
           <div class="card-content">
-            <p>Entity not found: ${this.config.learning_entity}</p>
+            <p>${localize(this.hass, 'entity_not_found')} ${this.config.learning_entity}</p>
           </div>
         </ha-card>
       `;
@@ -1460,17 +1461,17 @@ class AutoTPILearningCard extends LitElement {
 
     const confidence = Math.round(learningData.confidence * 100);
     const isStateOn = learningData.state !== 'Off';
-    const autoTpiState = isStateOn ? 'Active' : 'Off';
-    const status = learningData.status || 'Waiting for update...';
+    const autoTpiState = localize(this.hass, isStateOn ? 'state_active' : 'state_off');
+    const status = localizeStatus(this.hass, learningData.status) || localize(this.hass, 'waiting');
 
-    const buttonLabel = isStateOn ? 'Stop Learning' : 'Start Learning';
+    const buttonLabel = localize(this.hass, isStateOn ? 'stop_learning' : 'start_learning');
     const buttonIcon = isStateOn ? 'mdi:stop' : 'mdi:play';
 
     return html`
       <ha-card>
         <div class="card-content">
           <div class="header-row">
-            <div class="header-title">${this.config.name || 'Auto-TPI Learning'}</div>
+            <div class="header-title">${this.config.name || localize(this.hass, 'default_title')}</div>
             
             <div class="controls-container">
               <div class="main-controls">
@@ -1486,7 +1487,7 @@ class AutoTPILearningCard extends LitElement {
                 <ha-icon-button
                    @click="${() => this._toggleOptions()}"
                    style="margin-left: 0px; color: var(--secondary-text-color);"
-                   title="Options"
+                   title="${localize(this.hass, 'options')}"
                 >
                   <ha-icon icon="${this._showOptions ? 'mdi:chevron-up' : 'mdi:chevron-down'}"></ha-icon>
                 </ha-icon-button>
@@ -1502,7 +1503,7 @@ class AutoTPILearningCard extends LitElement {
                         style="pointer-events: none;"
                       ></ha-checkbox>
                     </div>
-                    <span class="checkbox-label">Reset</span>
+                    <span class="checkbox-label">${localize(this.hass, 'reset')}</span>
                   </div>
                   <div class="checkbox-container" @click="${() => this._toggleBoostKintCheckbox()}">
                     <div style="width: 24px; display: flex; justify-content: center; margin-right: 4px;">
@@ -1511,7 +1512,7 @@ class AutoTPILearningCard extends LitElement {
                         style="pointer-events: none;"
                       ></ha-checkbox>
                     </div>
-                    <span class="checkbox-label">boost Kint on stagnation</span>
+                    <span class="checkbox-label">${localize(this.hass, 'boost_kint')}</span>
                   </div>
                    <div class="checkbox-container" @click="${() => this._toggleUnboostKextCheckbox()}">
                     <div style="width: 24px; display: flex; justify-content: center; margin-right: 4px;">
@@ -1520,7 +1521,7 @@ class AutoTPILearningCard extends LitElement {
                         style="pointer-events: none;"
                       ></ha-checkbox>
                     </div>
-                    <span class="checkbox-label">unboost Kext on overshoot</span>
+                    <span class="checkbox-label">${localize(this.hass, 'unboost_kext')}</span>
                   </div>
                 ` : html`
                   <div class="checkbox-container disabled">
@@ -1531,7 +1532,7 @@ class AutoTPILearningCard extends LitElement {
                         style="pointer-events: none;"
                       ></ha-checkbox>
                     </div>
-                    <span class="checkbox-label">boost Kint on stagnation</span>
+                    <span class="checkbox-label">${localize(this.hass, 'boost_kint')}</span>
                   </div>
                   <div class="checkbox-container disabled">
                     <div style="width: 24px; display: flex; justify-content: center; margin-right: 4px;">
@@ -1541,7 +1542,7 @@ class AutoTPILearningCard extends LitElement {
                         style="pointer-events: none;"
                       ></ha-checkbox>
                     </div>
-                    <span class="checkbox-label">unboost Kext on overshoot</span>
+                    <span class="checkbox-label">${localize(this.hass, 'unboost_kext')}</span>
                   </div>
                 `}
                 </div>
@@ -1552,28 +1553,28 @@ class AutoTPILearningCard extends LitElement {
           <div class="telemetry">
             <div class="telemetry-content">
               <div class="telem-line">
-                <span class="label">State:</span>
+                <span class="label">${localize(this.hass, 'state')}</span>
                 <span style="${isStateOn ? 'color: var(--success-color, #4CAF50); font-weight: bold;' : ''}">${autoTpiState}</span>
                 &nbsp;|&nbsp;
-                <span class="label">Confidence:</span> ${confidence}%
+                <span class="label">${localize(this.hass, 'confidence')}</span> ${confidence}%
               </div>
 
               <div class="telem-line" style="align-items: flex-start;">
                 <div style="display: flex; flex-direction: column; margin-right: 24px;">
                   <span class="kint-color">Kint: ${learningData.kint.toFixed(4)}</span>
-                  <span style="font-size: 0.9em; opacity: 0.8;">Cycles: ${learningData.kintCycles}</span>
+                  <span style="font-size: 0.9em; opacity: 0.8;">${localize(this.hass, 'cycles')} ${learningData.kintCycles}</span>
                 </div>
                 <div style="display: flex; flex-direction: column; margin-right: 24px;">
                   <span class="kext-color">Kext: ${learningData.kext.toFixed(4)}</span>
-                  <span style="font-size: 0.9em; opacity: 0.8;">Cycles: ${learningData.kextCycles}</span>
+                  <span style="font-size: 0.9em; opacity: 0.8;">${localize(this.hass, 'cycles')} ${learningData.kextCycles}</span>
                 </div>
                 <div style="display: flex; flex-direction: column;">
-                  <span style="color: var(--chart-color-max-capacity); font-weight: bold;">Heat Rate: ${this._getCurrentMaxCapacity()}</span>
+                  <span style="color: var(--chart-color-max-capacity); font-weight: bold;">${localize(this.hass, 'heat_rate')}: ${this._getCurrentMaxCapacity()}</span>
                 </div>
               </div>
 
               <div class="telem-line status">
-                Last cycle: ${status}
+                ${localize(this.hass, 'last_cycle')} ${status}
               </div>
             </div>
             
@@ -1602,19 +1603,19 @@ class AutoTPILearningCard extends LitElement {
               <span class="dot kext-bg" style="opacity: ${this._showKext ? 1 : 0.3}"></span> Kext
             </div>
             <div class="legend-item clickable" @click="${() => this._toggleMaxCapacity()}">
-              <span class="dot max-capacity-bg" style="opacity: ${this._showMaxCapacity ? 1 : 0.3}"></span> Hrate
+              <span class="dot max-capacity-bg" style="opacity: ${this._showMaxCapacity ? 1 : 0.3}"></span> ${localize(this.hass, 'legend_hrate')}
             </div>
             <div class="legend-item clickable" @click="${() => this._toggleSetpoint()}">
-              <span class="dot setpoint-bg" style="opacity: ${this._showSetpoint ? 1 : 0.3}"></span> SPoint
+              <span class="dot setpoint-bg" style="opacity: ${this._showSetpoint ? 1 : 0.3}"></span> ${localize(this.hass, 'legend_setpoint')}
             </div>
             <div class="legend-item clickable" @click="${() => this._toggleExtTemp()}">
-              <span class="dot ext-temp-bg" style="opacity: ${this._showExtTemp ? 1 : 0.3}"></span> ExTemp
+              <span class="dot ext-temp-bg" style="opacity: ${this._showExtTemp ? 1 : 0.3}"></span> ${localize(this.hass, 'legend_ext_temp')}
             </div>
             <div class="legend-item clickable" @click="${() => this._toggleTemp()}">
-              <span class="dot temp-bg" style="opacity: ${this._showTemp ? 1 : 0.3}"></span> Temp
+              <span class="dot temp-bg" style="opacity: ${this._showTemp ? 1 : 0.3}"></span> ${localize(this.hass, 'legend_temp')}
             </div>
             <div class="legend-item clickable" @click="${() => this._toggleHeating()}">
-              <span class="dot heating-bg" style="opacity: ${this._showHeating ? 1 : 0.3}"></span> Heat
+              <span class="dot heating-bg" style="opacity: ${this._showHeating ? 1 : 0.3}"></span> ${localize(this.hass, 'legend_heat')}
             </div>
           </div>
         </div>
@@ -1916,7 +1917,7 @@ class AutoTPILearningCardEditor extends LitElement {
     return html`
       <div class="card-config">
         <div class="option">
-          <label>Nom</label>
+          <label>${localize(this.hass, 'editor_name')}</label>
           <input 
             type="text" 
             .value="${this.config.name || ''}" 
@@ -1925,7 +1926,7 @@ class AutoTPILearningCardEditor extends LitElement {
         </div>
         
         <div class="option">
-          <label>Entité Climate</label>
+          <label>${localize(this.hass, 'editor_climate')}</label>
           <ha-entity-picker
             .hass="${this.hass}"
             .value="${this.config.climate_entity || ''}"
@@ -1936,7 +1937,7 @@ class AutoTPILearningCardEditor extends LitElement {
         </div>
 
         <div class="option">
-          <label>Entité Learning (sensor)</label>
+          <label>${localize(this.hass, 'editor_learning')}</label>
           <ha-entity-picker
             .hass="${this.hass}"
             .value="${this.config.learning_entity || ''}"
@@ -1991,4 +1992,4 @@ if (!window.customCards.some(card => card.type === 'auto-tpi-learning-card')) {
     name: 'Auto-TPI Learning Card',
     description: 'Visualization of Versatile Thermostat Auto-TPI learning process'
   });
-}
+}
