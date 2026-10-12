@@ -330,7 +330,6 @@ const b=globalThis,w=t=>t,k=b.trustedTypes,S=k?k.createPolicy("lit-html",{create
       cursor: pointer;
       user-select: none;
       width: 100%;
-      margin-bottom: -15px;
     }
     .checkbox-container:last-child {
         margin-bottom: 0px;
