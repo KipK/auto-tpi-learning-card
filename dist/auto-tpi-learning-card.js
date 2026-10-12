@@ -48,11 +48,11 @@ const b=globalThis,w=t=>t,k=b.trustedTypes,S=k?k.createPolicy("lit-html",{create
       `}),W=[],q=y>2?1:.5;for(let t=Math.ceil(m/q)*q;t<=y+.001;t+=q)W.push(t);const G=W.map(t=>{const i=d(t);return B`
         <line x1="${s.left}" y1="${i}" x2="${e-s.right}" y2="${i}" stroke="var(--chart-color-grid)" stroke-width="1" opacity="0.2" />
         <text x="${e-s.right+42}" y="${i+5}" text-anchor="start" font-size="12" fill="var(--chart-color-max-capacity)" opacity="0.9">${t.toFixed(1)}</text>
-      `}),J=[],Q=(r-a)/5,tt=[36e5,72e5,108e5,144e5,216e5,432e5,864e5];let et=tt.find(t=>Q<=t)||tt[tt.length-1];const it=new Date(a);it.setMinutes(0,0,0),it.getTime()<a&&it.setTime(it.getTime()+36e5);let st=it.getTime();for(;st<=r;){const t=new Date(st),e=t.getHours();if(e%(et/36e5)===0){const o=h(st),a=`${t.getHours().toString().padStart(2,"0")}:${t.getMinutes().toString().padStart(2,"0")}`;let r="";if(0===e){const e={day:"numeric",month:"short"};r=t.toLocaleDateString("fr-FR",e)}J.push(B`
-          <line x1="${o}" y1="${s.top+n}" x2="${o}" y2="${s.top+n+5}" stroke="var(--chart-color-time-label)" stroke-width="1" />
-          <text x="${o}" y="${i-18}" text-anchor="middle" font-size="12" fill="var(--chart-color-time-label)">${a}</text>
-          ${r?B`<text x="${o}" y="${i-4}" text-anchor="middle" font-size="10" fill="var(--chart-color-sub-label)">${r}</text>`:""}
-        `)}st+=36e5}return B`
+      `}),J=[],Q=(r-a)/5,tt=[36e5,72e5,108e5,144e5,216e5,432e5,864e5];let et=tt.find(t=>Q<=t)||tt[tt.length-1];const it=new Date(a);it.setMinutes(0,0,0),it.getTime()<a&&it.setTime(it.getTime()+36e5);let st=it.getTime(),ot=-1/0;for(;st<=r;){const t=new Date(st),e=t.getHours();if(e%(et/36e5)===0){const o=h(st),a=`${t.getHours().toString().padStart(2,"0")}:${t.getMinutes().toString().padStart(2,"0")}`;let r="";if(0===e){const e={day:"numeric",month:"short"};r=t.toLocaleDateString("fr-FR",e)}o-ot>=72&&(J.push(B`
+            <line x1="${o}" y1="${s.top+n}" x2="${o}" y2="${s.top+n+5}" stroke="var(--chart-color-time-label)" stroke-width="1" />
+            <text x="${o}" y="${i-18}" text-anchor="middle" font-size="12" fill="var(--chart-color-time-label)">${a}</text>
+            ${r?B`<text x="${o}" y="${i-4}" text-anchor="middle" font-size="10" fill="var(--chart-color-sub-label)">${r}</text>`:""}
+          `),ot=o)}st+=36e5}return B`
       <defs>
         <clipPath id="chart-clip">
           <rect x="${s.left}" y="${s.top}" width="${o}" height="${n}" />

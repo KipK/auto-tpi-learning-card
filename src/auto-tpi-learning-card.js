@@ -1325,6 +1325,8 @@ class AutoTPILearningCard extends LitElement {
     startDate.setMinutes(0, 0, 0);
     if (startDate.getTime() < xMin) startDate.setTime(startDate.getTime() + 3600000);
     let currentTickTime = startDate.getTime();
+    let lastLabelX = -Infinity;
+    const minLabelSpacing = 72;
 
     while (currentTickTime <= xMax) {
       const d = new Date(currentTickTime);
@@ -1339,11 +1341,14 @@ class AutoTPILearningCard extends LitElement {
           const dayOptions = { day: 'numeric', month: 'short' };
           subLabel = d.toLocaleDateString('fr-FR', dayOptions);
         }
-        timeLabels.push(svg`
-          <line x1="${xPos}" y1="${padding.top + chartHeight}" x2="${xPos}" y2="${padding.top + chartHeight + 5}" stroke="var(--chart-color-time-label)" stroke-width="1" />
-          <text x="${xPos}" y="${height - 18}" text-anchor="middle" font-size="12" fill="var(--chart-color-time-label)">${label}</text>
-          ${subLabel ? svg`<text x="${xPos}" y="${height - 4}" text-anchor="middle" font-size="10" fill="var(--chart-color-sub-label)">${subLabel}</text>` : ''}
-        `);
+        if (xPos - lastLabelX >= minLabelSpacing) {
+          timeLabels.push(svg`
+            <line x1="${xPos}" y1="${padding.top + chartHeight}" x2="${xPos}" y2="${padding.top + chartHeight + 5}" stroke="var(--chart-color-time-label)" stroke-width="1" />
+            <text x="${xPos}" y="${height - 18}" text-anchor="middle" font-size="12" fill="var(--chart-color-time-label)">${label}</text>
+            ${subLabel ? svg`<text x="${xPos}" y="${height - 4}" text-anchor="middle" font-size="10" fill="var(--chart-color-sub-label)">${subLabel}</text>` : ''}
+          `);
+          lastLabelX = xPos;
+        }
       }
       currentTickTime += 3600000;
     }
