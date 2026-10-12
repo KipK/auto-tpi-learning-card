@@ -1695,7 +1695,6 @@ class AutoTPILearningCard extends LitElement {
       cursor: pointer;
       user-select: none;
       width: 100%;
-      margin-bottom: -15px;
     }
     .checkbox-container:last-child {
         margin-bottom: 0px;
