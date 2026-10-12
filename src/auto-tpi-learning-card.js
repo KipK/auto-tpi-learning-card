@@ -47,6 +47,7 @@ class AutoTPILearningCard extends LitElement {
     return {
       learning_entity: "",
       climate_entity: "",
+      ext_temp_entity: "",
       name: ""
     };
   }
@@ -223,6 +224,11 @@ class AutoTPILearningCard extends LitElement {
     try {
       const learningEntityId = this.config.learning_entity;
       const climateEntityId = this.config.climate_entity;
+      const extTempEntityId = this.config.ext_temp_entity || null;
+
+      if (climateEntityId && !this.hass.states[climateEntityId]) {
+        console.warn(`Auto-TPI card: climate entity "${climateEntityId}" is not available; temperature and setpoint curves cannot be built.`);
+      }
 
       const learningState = this.hass.states[learningEntityId];
       let startTimeStr = learningState?.attributes?.learning_start_dt;
@@ -236,14 +242,23 @@ class AutoTPILearningCard extends LitElement {
 
       const startTimeIso = startTime.toISOString();
       const endTimeIso = new Date().toISOString();
-      const entityIds = [learningEntityId, climateEntityId].join(',');
+      const entityIds = [learningEntityId, climateEntityId, extTempEntityId]
+        .filter(id => !!id)
+        .join(',');
 
       const url = `history/period/${startTimeIso}?filter_entity_id=${entityIds}&end_time=${endTimeIso}&significant_changes_only=0`;
 
       const response = await this.hass.callApi('GET', url);
 
-      this._processHistory(response, learningEntityId, climateEntityId, startTime);
+      this._processHistory(response, learningEntityId, climateEntityId, extTempEntityId, startTime);
       this._lastFetchTime = Date.now();
+
+      // Diagnostic: the climate entity exposes the indoor temperature and the
+      // setpoint. Warn when the history returned none of them, which points to a
+      // missing/renamed entity or to attributes absent from the recorder history.
+      if (this._history && this._history.temp.length === 0) {
+        console.warn(`Auto-TPI card: no indoor temperature found for "${climateEntityId}" in the history period.`);
+      }
 
     } catch (err) {
       console.error("Error fetching history:", err);
@@ -317,7 +332,7 @@ class AutoTPILearningCard extends LitElement {
     return series.slice(startIndex, endIndex + 1);
   }
 
-  _processHistory(rawHistory, learningEntityId, climateEntityId, startTime) {
+  _processHistory(rawHistory, learningEntityId, climateEntityId, extTempEntityId, startTime) {
     if (!Array.isArray(rawHistory)) {
       this._history = { kint: [], kext: [], temp: [], heating: [], setpoint: [], extTemp: [], maxCapacity: [], startTime: startTime.getTime() };
       return;
@@ -344,10 +359,11 @@ class AutoTPILearningCard extends LitElement {
       if (!entityHistory || entityHistory.length === 0) continue;
 
       const entityId = entityHistory[0].entity_id;
-      const isLearning = entityId === learningEntityId;
-      const isClimate = entityId === climateEntityId;
+      const isLearning = this._entityIdMatches(entityId, learningEntityId);
+      const isClimate = this._entityIdMatches(entityId, climateEntityId);
+      const isExtTemp = this._entityIdMatches(entityId, extTempEntityId);
 
-      if (!isLearning && !isClimate) continue;
+      if (!isLearning && !isClimate && !isExtTemp) continue;
 
       for (const state of entityHistory) {
         const t = new Date(state.last_updated).getTime();
@@ -370,17 +386,30 @@ class AutoTPILearningCard extends LitElement {
           if (attrs.max_capacity_heat != null) {
             safePush(series.maxCapacity, t, attrs.max_capacity_heat);
           }
+        } else if (isExtTemp) {
+          safePush(series.extTemp, t, state.state);
         } else {
-          if (attrs.current_temperature != null) safePush(series.temp, t, attrs.current_temperature);
-          if (attrs.temperature != null) safePush(series.setpoint, t, attrs.temperature);
-
-          let extTempVal = null;
-          if (attrs.specific_states?.ext_current_temperature != null) {
-            extTempVal = attrs.specific_states.ext_current_temperature;
-          } else if (attrs.ext_current_temperature != null) {
-            extTempVal = attrs.ext_current_temperature;
+          // Indoor temperature: climate standard attribute, with the VTherm EMA
+          // temperature as a fallback.
+          let tempVal = null;
+          if (attrs.current_temperature != null) {
+            tempVal = attrs.current_temperature;
+          } else if (attrs.ema_temp != null) {
+            tempVal = attrs.ema_temp;
           }
-          if (extTempVal != null) safePush(series.extTemp, t, extTempVal);
+          if (tempVal != null) safePush(series.temp, t, tempVal);
+
+          // Setpoint: climate standard attribute, with the VTherm requested/current
+          // state sections as fallbacks.
+          let setpointVal = null;
+          if (attrs.temperature != null) {
+            setpointVal = attrs.temperature;
+          } else if (attrs.current_state?.target_temperature != null) {
+            setpointVal = attrs.current_state.target_temperature;
+          } else if (attrs.requested_state?.target_temperature != null) {
+            setpointVal = attrs.requested_state.target_temperature;
+          }
+          if (setpointVal != null) safePush(series.setpoint, t, setpointVal);
 
           if (attrs.hvac_action !== undefined) {
             series.heating.push({ t, val: attrs.hvac_action === 'heating' ? 1 : 0 });
@@ -439,6 +468,13 @@ class AutoTPILearningCard extends LitElement {
   // casing used by the integration (Off/off, Active/active, Bootstrap/bootstrap).
   _normalizeState(state) {
     return (state === null || state === undefined) ? '' : state.toString().toLowerCase();
+  }
+
+  // Compare two entity ids ignoring surrounding spaces and casing, so a manually
+  // entered or copied entity id still matches the one returned by the history API.
+  _entityIdMatches(entityId, configuredId) {
+    if (!entityId || !configuredId) return false;
+    return entityId.trim().toLowerCase() === configuredId.trim().toLowerCase();
   }
 
   _getCurrentMaxCapacity() {
@@ -1653,9 +1689,11 @@ class AutoTPILearningCard extends LitElement {
             <div class="legend-item clickable" @click="${() => this._toggleSetpoint()}">
               <span class="dot setpoint-bg" style="opacity: ${this._showSetpoint ? 1 : 0.3}"></span> ${localize(this.hass, 'legend_setpoint')}
             </div>
-            <div class="legend-item clickable" @click="${() => this._toggleExtTemp()}">
-              <span class="dot ext-temp-bg" style="opacity: ${this._showExtTemp ? 1 : 0.3}"></span> ${localize(this.hass, 'legend_ext_temp')}
-            </div>
+            ${this.config.ext_temp_entity ? html`
+              <div class="legend-item clickable" @click="${() => this._toggleExtTemp()}">
+                <span class="dot ext-temp-bg" style="opacity: ${this._showExtTemp ? 1 : 0.3}"></span> ${localize(this.hass, 'legend_ext_temp')}
+              </div>
+            ` : ''}
             <div class="legend-item clickable" @click="${() => this._toggleTemp()}">
               <span class="dot temp-bg" style="opacity: ${this._showTemp ? 1 : 0.3}"></span> ${localize(this.hass, 'legend_temp')}
             </div>
@@ -1932,6 +1970,12 @@ class AutoTPILearningCardEditor extends LitElement {
     this._fireConfigChanged(newConfig);
   }
 
+  _extTempChanged(ev) {
+    const newConfig = { ...this.config };
+    newConfig.ext_temp_entity = ev.detail.value;
+    this._fireConfigChanged(newConfig);
+  }
+
   _nameChanged(ev) {
     const newConfig = { ...this.config };
     newConfig.name = ev.target.value;
@@ -1988,6 +2032,17 @@ class AutoTPILearningCardEditor extends LitElement {
             .value="${this.config.learning_entity || ''}"
             .includeEntities="${this._getLearningSensors()}"
             @value-changed="${this._learningChanged}"
+            allow-custom-entity
+          ></ha-entity-picker>
+        </div>
+
+        <div class="option">
+          <label>${localize(this.hass, 'editor_ext_temp')}</label>
+          <ha-entity-picker
+            .hass="${this.hass}"
+            .value="${this.config.ext_temp_entity || ''}"
+            .includeDomains="${['sensor']}"
+            @value-changed="${this._extTempChanged}"
             allow-custom-entity
           ></ha-entity-picker>
         </div>

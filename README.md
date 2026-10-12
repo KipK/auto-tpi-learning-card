@@ -56,6 +56,7 @@ You can configure the card using the visual editor or via YAML.
 4.  **Name**: (Optional) specific title for the card.
 5.  **Climate Entity**: Select your Versatile Thermostat entity.
 6.  **Learning Entity**: Select the associated learning state sensor (e.g., `sensor.thermostat_auto_tpi_learning_state`). The editor will attempt to auto-detect this based on the climate entity.
+7.  **External Temperature Entity**: (Optional) Select the outdoor temperature sensor to display the outside temperature curve. Leave empty to hide this curve.
 
 ![image](assets/config.png)
 
@@ -66,6 +67,7 @@ type: custom:auto-tpi-learning-card
 name: Salon Learning Session
 climate_entity: climate.salon
 learning_entity: sensor.salon_auto_tpi_learning_state
+ext_temp_entity: sensor.outdoor_temperature
 ```
 
 | Option | Type | Required | Description |
@@ -73,6 +75,7 @@ learning_entity: sensor.salon_auto_tpi_learning_state
 | `type` | string | **Yes** | `custom:auto-tpi-learning-card` |
 | `climate_entity` | string | **Yes** | The VTherm climate entity. |
 | `learning_entity` | string | **Yes** | The sensor entity tracking the learning state. |
+| `ext_temp_entity` | string | No | Outdoor temperature sensor used for the external temperature curve. When empty, the curve and its legend entry are hidden. |
 | `name` | string | No | Custom title for the card. |
 
 ## Features
@@ -84,7 +87,7 @@ learning_entity: sensor.salon_auto_tpi_learning_state
     *   **Kint**: Calculated Internal Coefficient.
     *   **Kext**: Calculated External Coefficient.
     *   **Temp**: Current room temperature.
-    *   **ExtTemp**: External temperature.
+    *   **ExtTemp**: External temperature, from the configured external temperature entity (hidden when not configured).
     *   **SetPoint**: Target temperature.
     *   **Heating**: Orange bars indicating when the heating was active.
 *   **Legend**: Click on legend items to toggle the visibility of specific series.

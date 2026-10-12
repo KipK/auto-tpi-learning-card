@@ -38,6 +38,7 @@ const translations = {
     editor_name: 'Name',
     editor_climate: 'Climate entity',
     editor_learning: 'Learning entity (sensor)',
+    editor_ext_temp: 'External temperature entity (optional)',
   },
   fr: {
     loading: "Chargement de l'historique...",
@@ -75,6 +76,7 @@ const translations = {
     editor_name: 'Nom',
     editor_climate: 'Entité Climate',
     editor_learning: 'Entité Learning (sensor)',
+    editor_ext_temp: "Entité de température extérieure (optionnel)",
   },
   nl: {
     loading: 'Historie laden...',
@@ -112,6 +114,7 @@ const translations = {
     editor_name: 'Naam',
     editor_climate: 'Climate-entiteit',
     editor_learning: 'Leer-entiteit (sensor)',
+    editor_ext_temp: 'Entiteit buitentemperatuur (optioneel)',
   },
 };
 
