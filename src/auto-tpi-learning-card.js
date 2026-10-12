@@ -358,7 +358,7 @@ class AutoTPILearningCard extends LitElement {
           // Detect End of Learning
           const kintCycles = attrs.coeff_int_cycles || 0;
           const kextCycles = attrs.coeff_ext_cycles || 0;
-          if (state.state === 'Off' && kintCycles >= 50 && kextCycles >= 50) {
+          if (this._normalizeState(state.state) === 'off' && kintCycles >= 50 && kextCycles >= 50) {
             if (endTime === null || t < endTime) {
               endTime = t;
             }
@@ -399,7 +399,7 @@ class AutoTPILearningCard extends LitElement {
     // before a reset if start_dt was missing), we must ignore it to keep the graph live.
     const currentEntity = this.hass.states[learningEntityId];
     if (currentEntity) {
-      const isCurrentlyOff = currentEntity.state === 'Off';
+      const isCurrentlyOff = this._normalizeState(currentEntity.state) === 'off';
       const currentKintCycles = currentEntity.attributes.coeff_int_cycles || 0;
       const currentKextCycles = currentEntity.attributes.coeff_ext_cycles || 0;
       const isActuallyFinished = isCurrentlyOff && currentKintCycles >= 50 && currentKextCycles >= 50;
@@ -435,6 +435,12 @@ class AutoTPILearningCard extends LitElement {
     };
   }
 
+  // Normalize the learning sensor state so the card is independent of the
+  // casing used by the integration (Off/off, Active/active, Bootstrap/bootstrap).
+  _normalizeState(state) {
+    return (state === null || state === undefined) ? '' : state.toString().toLowerCase();
+  }
+
   _getCurrentMaxCapacity() {
     const entity = this.hass.states[this.config.learning_entity];
     const maxCapacity = entity.attributes.max_capacity_heat;
@@ -446,28 +452,43 @@ class AutoTPILearningCard extends LitElement {
   _toggleAutoTpi(isStateOn) {
     if (!this.hass || !this.config) return;
 
+    const target = { entity_id: this.config.climate_entity };
+
+    let serviceData;
     if (isStateOn) {
       // We want to STOP
       // reinitialise: false
-      this.hass.callService('versatile_thermostat', 'set_auto_tpi_mode', {
-        entity_id: this.config.climate_entity,
+      serviceData = {
         auto_tpi_mode: false,
         reinitialise: false
-      });
+      };
     } else {
       // We want to START
       // reinitialise depends on checkbox (default unchecked = false = Resume)
-      this.hass.callService('versatile_thermostat', 'set_auto_tpi_mode', {
-        entity_id: this.config.climate_entity,
+      serviceData = {
         auto_tpi_mode: true,
         reinitialise: this._resetChecked,
         allow_kint_boost_on_stagnation: this._boostKintChecked,
         allow_kext_compensation_on_overshoot: this._unboostKextChecked
-      });
+      };
     }
+
+    this.hass.callService('versatile_thermostat', 'set_auto_tpi_mode', serviceData, target)
+      .catch(err => {
+        console.error("Error calling versatile_thermostat.set_auto_tpi_mode:", err);
+        this._notify(localize(this.hass, 'service_error'));
+      });
 
     // Reset the checkbox after action
     this._resetChecked = false;
+  }
+
+  _notify(message) {
+    this.dispatchEvent(new CustomEvent('hass-notification', {
+      detail: { message },
+      bubbles: true,
+      composed: true
+    }));
   }
 
   _toggleResetCheckbox() {
@@ -1478,8 +1499,10 @@ class AutoTPILearningCard extends LitElement {
     }
 
     const confidence = Math.round(learningData.confidence * 100);
-    const isStateOn = learningData.state !== 'Off';
-    const autoTpiState = localize(this.hass, isStateOn ? 'state_active' : 'state_off');
+    const normalizedState = this._normalizeState(learningData.state);
+    const isStateOn = normalizedState === 'active' || normalizedState === 'bootstrap';
+    const isDisabled = normalizedState === 'disabled';
+    const autoTpiState = localize(this.hass, isDisabled ? 'state_disabled' : (isStateOn ? 'state_active' : 'state_off'));
     const status = localizeStatus(this.hass, learningData.status) || localize(this.hass, 'waiting');
 
     const buttonLabel = localize(this.hass, isStateOn ? 'stop_learning' : 'start_learning');
@@ -1493,15 +1516,19 @@ class AutoTPILearningCard extends LitElement {
             
             <div class="controls-container">
               <div class="main-controls">
-                <mwc-button
-                  @click=${() => this._toggleAutoTpi(isStateOn)}
-                  class="${isStateOn ? 'stop-btn' : 'start-btn'}"
-                  dense
-                  raised
-                >
-                  <ha-icon icon="${buttonIcon}" style="margin-right: 4px;"></ha-icon>
-                  ${buttonLabel}
-                </mwc-button>
+                ${isDisabled ? html`
+                  <span style="color: var(--secondary-text-color); font-size: 0.9em;">${localize(this.hass, 'auto_tpi_disabled')}</span>
+                ` : html`
+                  <mwc-button
+                    @click=${() => this._toggleAutoTpi(isStateOn)}
+                    class="${isStateOn ? 'stop-btn' : 'start-btn'}"
+                    dense
+                    raised
+                  >
+                    <ha-icon icon="${buttonIcon}" style="margin-right: 4px;"></ha-icon>
+                    ${buttonLabel}
+                  </mwc-button>
+                `}
                 <ha-icon-button
                    @click="${() => this._toggleOptions()}"
                    style="margin-left: 0px; color: var(--secondary-text-color);"
