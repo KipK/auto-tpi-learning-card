@@ -2,4 +2,5 @@ node_modules/
 *.bak
 logs
 *.log
+plans/
 

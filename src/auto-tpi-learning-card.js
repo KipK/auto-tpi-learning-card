@@ -162,37 +162,55 @@ class AutoTPILearningCard extends LitElement {
   updated(changedProperties) {
     super.updated(changedProperties);
 
-    if (changedProperties.has('hass') && this.hass && this.config) {
-      const learningEntityId = this.config.learning_entity;
-      const learningState = this.hass.states[learningEntityId];
-      const currentStartDt = learningState?.attributes?.learning_start_dt;
+    if (!changedProperties.has('hass') || !this.hass || !this.config) {
+      return;
+    }
 
-      if (currentStartDt && this._lastStartDt && currentStartDt !== this._lastStartDt) {
-        this._history = null;
-      }
-      if (currentStartDt) {
-        this._lastStartDt = currentStartDt;
-      }
+    const learningEntityId = this.config.learning_entity;
+    const learningState = this.hass.states[learningEntityId];
+    const entityAvailable = !!learningState;
+    const currentStartDt = learningState?.attributes?.learning_start_dt || null;
+    const currentStartTs = currentStartDt ? new Date(currentStartDt).getTime() : null;
 
-      // Check if current history matches the current start time
-      // This recovers from situations where learning_start_dt was temporarily unavailable
-      // and the card fetched a default 24h history containing old "finished" states.
-      if (this._history && currentStartDt) {
-        const currentStartTs = new Date(currentStartDt).getTime();
-        if (Math.abs(this._history.startTime - currentStartTs) > 1000) {
-          this._history = null;
-        }
-      }
+    // A different learning start date means a new session: drop the previous history.
+    // Compare timestamps so that a reformatted datetime does not look like a new session.
+    const lastStartTs = this._lastStartDt ? new Date(this._lastStartDt).getTime() : null;
+    if (
+      currentStartTs !== null && Number.isFinite(currentStartTs) &&
+      lastStartTs !== null && Number.isFinite(lastStartTs) &&
+      Math.abs(currentStartTs - lastStartTs) > 1000
+    ) {
+      this._history = null;
+    }
 
-      const now = Date.now();
-      const isStale = (now - this._lastFetchTime) > 5 * 60 * 1000;
-      const isFinished = this._history && this._history.endTime;
+    // The loaded history must belong to the current session.
+    if (
+      this._history && this._history.startTime != null &&
+      currentStartTs !== null && Number.isFinite(currentStartTs) &&
+      Math.abs(this._history.startTime - currentStartTs) > 1000
+    ) {
+      this._history = null;
+    }
 
-      const shouldFetch = (!this._history || (isStale && !isFinished)) && !this._loading;
+    if (currentStartTs !== null && Number.isFinite(currentStartTs)) {
+      this._lastStartDt = currentStartDt;
+    }
 
-      if (shouldFetch) {
-        this._fetchHistory();
-      }
+    // While the entity is reloading, or its start date is momentarily unavailable
+    // for an existing session, keep the current history instead of refetching a
+    // wider default window that would replace the session and reset the chart.
+    if (!entityAvailable || (currentStartTs === null && this._history)) {
+      return;
+    }
+
+    const now = Date.now();
+    const isStale = (now - this._lastFetchTime) > 5 * 60 * 1000;
+    const isFinished = this._history && this._history.endTime;
+
+    const shouldFetch = (!this._history || (isStale && !isFinished)) && !this._loading;
+
+    if (shouldFetch) {
+      this._fetchHistory();
     }
   }
 
