@@ -1392,41 +1392,39 @@ class AutoTPILearningCard extends LitElement {
 
     const timeLabels = [];
     const durationMs = xMax - xMin;
-    const targetTicks = 5;
-    const rawInterval = durationMs / targetTicks;
+    const targetTicks = Math.min(10, Math.max(2, Math.floor(chartWidth / 80) + 1));
+    const rawInterval = durationMs / (targetTicks - 1);
+    const dayMs = 24 * 3600000;
     const niceIntervals = [3600000, 2 * 3600000, 3 * 3600000, 4 * 3600000, 6 * 3600000, 12 * 3600000, 24 * 3600000];
-    let tickInterval = niceIntervals.find(i => rawInterval <= i) || niceIntervals[niceIntervals.length - 1];
+    const tickInterval = niceIntervals.find(interval => rawInterval <= interval)
+      || Math.ceil(rawInterval / dayMs) * dayMs;
 
     const startDate = new Date(xMin);
-    startDate.setMinutes(0, 0, 0);
-    if (startDate.getTime() < xMin) startDate.setTime(startDate.getTime() + 3600000);
-    let currentTickTime = startDate.getTime();
-    const minTickSpacing = 56;
-    let lastLabelX = -Infinity;
-
-    while (currentTickTime <= xMax) {
-      const d = new Date(currentTickTime);
-      const h = d.getHours();
+    if (tickInterval >= dayMs) {
+      startDate.setHours(0, 0, 0, 0);
+      if (startDate.getTime() < xMin) startDate.setDate(startDate.getDate() + 1);
+    } else {
       const hoursInInterval = tickInterval / 3600000;
+      startDate.setHours(Math.floor(startDate.getHours() / hoursInInterval) * hoursInInterval, 0, 0, 0);
+      if (startDate.getTime() < xMin) startDate.setTime(startDate.getTime() + tickInterval);
+    }
+    let currentTickTime = startDate.getTime();
 
-      if (h % hoursInInterval === 0) {
-        const xPos = getX(currentTickTime);
-        if (xPos - lastLabelX >= minTickSpacing) {
-          const label = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
-          let subLabel = '';
-          if (h === 0) {
-            const dayOptions = { day: 'numeric', month: 'short' };
-            subLabel = d.toLocaleDateString(getLocale(this.hass), dayOptions);
-          }
-          timeLabels.push(svg`
-            <line x1="${xPos}" y1="${padding.top + chartHeight}" x2="${xPos}" y2="${padding.top + chartHeight + 5}" stroke="var(--chart-color-time-label)" stroke-width="1" />
-            <text x="${xPos}" y="${height - 18}" text-anchor="middle" font-size="12" fill="var(--chart-color-time-label)">${label}</text>
-            ${subLabel ? svg`<text x="${xPos}" y="${height - 4}" text-anchor="middle" font-size="10" fill="var(--chart-color-sub-label)">${subLabel}</text>` : ''}
-          `);
-          lastLabelX = xPos;
-        }
+    while (currentTickTime <= xMax && timeLabels.length < targetTicks) {
+      const d = new Date(currentTickTime);
+      const xPos = getX(currentTickTime);
+      const label = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+      let subLabel = '';
+      if (d.getHours() === 0 || tickInterval >= dayMs) {
+        const dayOptions = { day: 'numeric', month: 'short' };
+        subLabel = d.toLocaleDateString(getLocale(this.hass), dayOptions);
       }
-      currentTickTime += 3600000;
+      timeLabels.push(svg`
+        <line x1="${xPos}" y1="${padding.top + chartHeight}" x2="${xPos}" y2="${padding.top + chartHeight + 5}" stroke="var(--chart-color-time-label)" stroke-width="1" />
+        <text x="${xPos}" y="${height - 18}" text-anchor="middle" font-size="12" fill="var(--chart-color-time-label)">${label}</text>
+        ${subLabel ? svg`<text x="${xPos}" y="${height - 4}" text-anchor="middle" font-size="10" fill="var(--chart-color-sub-label)">${subLabel}</text>` : ''}
+      `);
+      currentTickTime += tickInterval;
     }
 
     return svg`
