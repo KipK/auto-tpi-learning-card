@@ -141,6 +141,8 @@ const statusTranslations = {
     cooling_down_naturally: 'cooling down naturally',
     anomalous_overheating: 'anomalous overheating',
     anomalous_overcooling: 'anomalous overcooling',
+    kext_waiting_settling: 'outdoor coefficient waits for the room to settle',
+    kint_window_crossed_setpoint: 'setpoint crossed during the window',
   },
   fr: {
     learning_started: 'apprentissage démarré',
@@ -162,6 +164,8 @@ const statusTranslations = {
     cooling_down_naturally: 'refroidissement naturel',
     anomalous_overheating: 'surchauffe anormale',
     anomalous_overcooling: 'refroidissement anormal',
+    kext_waiting_settling: 'coefficient extérieur en attente de stabilisation',
+    kint_window_crossed_setpoint: 'consigne franchie pendant la fenêtre',
   },
   nl: {
     learning_started: 'leren gestart',
@@ -183,6 +187,8 @@ const statusTranslations = {
     cooling_down_naturally: 'koelt vanzelf af',
     anomalous_overheating: 'afwijkende oververhitting',
     anomalous_overcooling: 'afwijkende onderkoeling',
+    kext_waiting_settling: 'buitencoëfficiënt wacht tot de ruimte stabiel is',
+    kint_window_crossed_setpoint: 'doeltemperatuur overschreden tijdens het venster',
   },
 };
 

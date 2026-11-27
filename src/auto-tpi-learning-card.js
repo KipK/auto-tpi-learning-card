@@ -460,7 +460,11 @@ class AutoTPILearningCard extends LitElement {
       learningStartDt: entity.attributes.learning_start_dt || '',
       learningDone: entity.attributes.learning_done,
       allowKintBoost: entity.attributes.allow_kint_boost_on_stagnation,
-      allowKextCompensation: entity.attributes.allow_kext_compensation_on_overshoot
+      allowKextCompensation: entity.attributes.allow_kext_compensation_on_overshoot,
+      // Integrations that learn Kint over multi-cycle windows expose neither the
+      // boost options nor the heating capacity: hide them when absent.
+      supportsBoostOptions: 'allow_kint_boost_on_stagnation' in entity.attributes,
+      hasHeatRate: entity.attributes.max_capacity_heat !== undefined
     };
   }
 
@@ -503,10 +507,13 @@ class AutoTPILearningCard extends LitElement {
       // reinitialise depends on checkbox (default unchecked = false = Resume)
       serviceData = {
         auto_tpi_mode: true,
-        reinitialise: this._resetChecked,
-        allow_kint_boost_on_stagnation: this._boostKintChecked,
-        allow_kext_compensation_on_overshoot: this._unboostKextChecked
+        reinitialise: this._resetChecked
       };
+      // Only send the boost options to integrations that accept them
+      if (this._getLearningData().supportsBoostOptions) {
+        serviceData.allow_kint_boost_on_stagnation = this._boostKintChecked;
+        serviceData.allow_kext_compensation_on_overshoot = this._unboostKextChecked;
+      }
     }
 
     this.hass.callService('versatile_thermostat', 'set_auto_tpi_mode', serviceData, target)
@@ -1586,6 +1593,7 @@ class AutoTPILearningCard extends LitElement {
                     </div>
                     <span class="checkbox-label">${localize(this.hass, 'reset')}</span>
                   </div>
+                  ${learningData.supportsBoostOptions ? html`
                   <div class="checkbox-container" @click="${() => this._toggleBoostKintCheckbox()}">
                     <div style="width: 24px; display: flex; justify-content: center; margin-right: 4px;">
                       <ha-checkbox
@@ -1604,7 +1612,8 @@ class AutoTPILearningCard extends LitElement {
                     </div>
                     <span class="checkbox-label">${localize(this.hass, 'unboost_kext')}</span>
                   </div>
-                ` : html`
+                  ` : ''}
+                ` : learningData.supportsBoostOptions ? html`
                   <div class="checkbox-container disabled">
                     <div style="width: 24px; display: flex; justify-content: center; margin-right: 4px;">
                       <ha-checkbox
@@ -1625,7 +1634,7 @@ class AutoTPILearningCard extends LitElement {
                     </div>
                     <span class="checkbox-label">${localize(this.hass, 'unboost_kext')}</span>
                   </div>
-                `}
+                ` : ''}
                 </div>
                ` : ''}
             </div>
@@ -1649,9 +1658,11 @@ class AutoTPILearningCard extends LitElement {
                   <span class="kext-color">Kext: ${learningData.kext.toFixed(4)}</span>
                   <span style="font-size: 0.9em; opacity: 0.8;">${localize(this.hass, 'cycles')} ${learningData.kextCycles}</span>
                 </div>
+                ${learningData.hasHeatRate ? html`
                 <div style="display: flex; flex-direction: column;">
                   <span style="color: var(--chart-color-max-capacity); font-weight: bold;">${localize(this.hass, 'heat_rate')}: ${this._getCurrentMaxCapacity()}</span>
                 </div>
+                ` : ''}
               </div>
 
               <div class="telem-line status">
@@ -1683,9 +1694,11 @@ class AutoTPILearningCard extends LitElement {
             <div class="legend-item clickable" @click="${() => this._toggleKext()}">
               <span class="dot kext-bg" style="opacity: ${this._showKext ? 1 : 0.3}"></span> Kext
             </div>
+            ${learningData.hasHeatRate ? html`
             <div class="legend-item clickable" @click="${() => this._toggleMaxCapacity()}">
               <span class="dot max-capacity-bg" style="opacity: ${this._showMaxCapacity ? 1 : 0.3}"></span> ${localize(this.hass, 'legend_hrate')}
             </div>
+            ` : ''}
             <div class="legend-item clickable" @click="${() => this._toggleSetpoint()}">
               <span class="dot setpoint-bg" style="opacity: ${this._showSetpoint ? 1 : 0.3}"></span> ${localize(this.hass, 'legend_setpoint')}
             </div>
@@ -2089,4 +2102,4 @@ if (!window.customCards.some(card => card.type === 'auto-tpi-learning-card')) {
     name: 'Auto-TPI Learning Card',
     description: 'Visualization of Versatile Thermostat Auto-TPI learning process'
   });
-}
+}
