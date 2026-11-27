@@ -1,7 +1,5 @@
 # Versatile Thermostat Auto-TPI Learning Card
 
-[![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=for-the-badge)](https://github.com/hacs/integration)
-
 Lovelace Home-assistant card for **Versatile Thermostat** AUTO-TPI feature.
 
 The main goal of this card is to display historical data of an Auto TPI learning session. It allows you to visualize the convergence of the coefficients (Kint and Kext) and analyze their correlation with internal/external temperatures and heating cycles.
@@ -15,24 +13,26 @@ The main goal of this card is to display historical data of an Auto TPI learning
 
 ## Installation
 
-### HACS (Recommended)
+### Via the Home Assistant Marketplace (HACS) (Recommended)
 
-This card is available in HACS (Home Assistant Community Store).
+This card is available in the Home Assistant Marketplace (HACS before Home Assistant 2026.11).
 
-1.  Click the button below to add this repository to HACS:
+<!-- ha-marketplace:exclude-start -->
+[![Open your Home Assistant instance and open a repository in the Marketplace.](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=KipK&repository=auto-tpi-learning-card&category=plugin)
 
-    [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=KipK&bouton&repository=auto-tpi-learning-card&category=plugin)
+Home Assistant older than 2026.11: [open it in HACS](https://my.home-assistant.io/redirect/hacs_repository/?owner=KipK&repository=auto-tpi-learning-card&category=plugin).
+<!-- ha-marketplace:exclude-end -->
 
-2.  **Or** manually add this repository URL to HACS:
+1.  Use the button above to add this repository, **or** manually add this repository URL to the Marketplace (HACS before Home Assistant 2026.11):
     *   Go to **HACS** > **Frontend**.
     *   Click the 3 dots in the top right corner > **Custom repositories**.
     *   URL: `https://github.com/KipK/auto-tpi-learning-card`
     *   Category: **Lovelace**
     *   Click **Add**.
 
-3.  Search for **Auto TPI Learning** and click **Download**.
+2.  Search for **Auto TPI Learning** and click **Download**.
 
-4.  Reload your resources if prompted.
+3.  Reload your resources if prompted.
 
 ### Manual Installation
 
