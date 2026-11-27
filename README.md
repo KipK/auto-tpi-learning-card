@@ -1,5 +1,8 @@
 # Versatile Thermostat Auto-TPI Learning Card
 
+> [!TIP]
+> **Looking for a complete view of your thermostat?** Try [Equinox](https://github.com/KipK/equinox) instead. Its dedicated dashboard follows **Auto TPI** learning (Equinox 0.4.9 or later) as well as [SmartPI](https://github.com/KipK/vtherm_smartpi) regulation, all in one card.
+
 Lovelace Home-assistant card for **Versatile Thermostat** AUTO-TPI feature.
 
 The main goal of this card is to display historical data of an Auto TPI learning session. It allows you to visualize the convergence of the coefficients (Kint and Kext) and analyze their correlation with internal/external temperatures and heating cycles.
